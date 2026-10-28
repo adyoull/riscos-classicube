@@ -9,10 +9,11 @@ CFLAGS  := -O1 -g -Wall -mfpu=vfpv3 -mfloat-abi=hard -no-pie \
 OUT     := out
 DEVKIT  ?= $(RISCOS_DEVKIT)
 
-check: $(OUT)/test_acornssl $(OUT)/test_socketpoll $(OUT)/test_cavecull
+check: $(OUT)/test_acornssl $(OUT)/test_socketpoll $(OUT)/test_cavecull $(OUT)/test_rawmouse
 	bash $(RCD_DIR)/qemu/aligntrap.sh $(OUT)/test_acornssl
 	bash $(RCD_DIR)/qemu/aligntrap.sh $(OUT)/test_socketpoll
 	bash $(RCD_DIR)/qemu/aligntrap.sh $(OUT)/test_cavecull
+	bash $(RCD_DIR)/qemu/aligntrap.sh $(OUT)/test_rawmouse
 
 $(OUT)/test_acornssl: test_acornssl.c ../../../src/SSL.c $(RCD_DIR)/fake/riscos.c
 	@mkdir -p $(OUT)
@@ -33,6 +34,15 @@ $(OUT)/test_socketpoll: test_socketpoll.c $(OUT)/platform_posix.o $(RCD_DIR)/fak
 $(OUT)/test_cavecull: test_cavecull.c ../../../src/CaveCull.c
 	@mkdir -p $(OUT)
 	$(CC) $(CFLAGS) -DCC_BUILD_CAVECULL -o $@ $^
+
+# Window_SDL2.c with the RISC OS branch on; what the mouse code doesn't
+# reach is left unresolved (never called)
+$(OUT)/window_sdl2.o: ../../../src/Window_SDL2.c
+	@mkdir -p $(OUT)
+	$(CC) $(CFLAGS) -I$(DEVKIT)/include -w -c -o $@ $<
+
+$(OUT)/test_rawmouse: test_rawmouse.c $(OUT)/window_sdl2.o $(RCD_DIR)/fake/riscos.c
+	$(CC) $(CFLAGS) -o $@ $^ -Wl,--unresolved-symbols=ignore-all
 
 clean:
 	rm -rf $(OUT)

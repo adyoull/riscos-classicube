@@ -8,7 +8,7 @@ against the riscos-mesa devkit (20.3.5-17 or later), then `elf2aif -e`
 | Part | How |
 |---|---|
 | Platform | `Platform_Posix.c` on UnixLib; single process (launcher and game in one task); URLs through `URI_Dispatch`; static symbol table instead of `dlopen` (OpenAL); data in `ClassiCube$Data` (default `<Choices$Write>.ClassiCube`); updater off |
-| Window, input | `Window_SDL2.c` on riscos-mesa's SDL2 (RISC OS video driver with GL) |
+| Window, input | `Window_SDL2.c` on riscos-mesa's SDL2 (RISC OS video driver with GL). That driver reports no keyboard focus (so the window counts as focused: otherwise the pause menu comes straight back) and has no relative mouse mode or pointer warp (so mouse look reads the mouse with OS_Word 21,4 and puts it back in the middle of the game's window with OS_Word 21,3, the window found with Wimp_GetPointerInfo) |
 | Graphics | `Graphics_GL1.c`: OpenGL 1.x, riscos-mesa (software, NEON fast paths); `CC_GL_FASTEST_HINTS`: GL_FASTEST perspective and fog hints (its fast route) |
 | Cave culling | `CaveCull.c`, `Builder.c` (links per chunk), `MapRenderer.c` (flood from the camera): `CC_BUILD_CAVECULL` |
 | Render size | `Window_SDL2.c`: `ClassiCube$RenderSize` (default 640x360, `full` = off) and `ClassiCube$Overlay` become `SDL_RISCOS_GL_RENDER_SIZE` / `SDL_RISCOS_GL_OVERLAY` before the game window opens; `sched_yield()` each frame; default view distance 128 |
@@ -40,6 +40,9 @@ against the riscos-mesa devkit (20.3.5-17 or later), then `elf2aif -e`
   - test_cavecull: CaveCull_CalcLinks against a plain cell-by-cell flood
     fill (3000 random chunks of 5-95% see-through cells, tunnels, rooms,
     winding paths).
+  - test_rawmouse: the mouse look code in Window_SDL2.c (RISC OS branch)
+    against fake SWIs: movement in pixels, back to the window's middle, a
+    moved window, full screen, a window that's gone.
   All catch deliberate mutants.
 - The portable code as ARM Linux (terminal window, software renderer) under
   qemu-arm-aligntrap -cpu cortex-a8: a singleplayer world generates and
