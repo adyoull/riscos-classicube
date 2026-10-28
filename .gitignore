@@ -237,3 +237,4 @@ ClassiCube,e1f
 ClassiCube-dbg.elf
 dist/
 misc/riscos/tests/out/
+misc/riscos/perf/out*/

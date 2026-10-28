@@ -29,11 +29,15 @@ use somewhere else).
 
 Speed
 -----
-Drawing is done by the CPU. If the game is slow:
-- in the game's options, lower the view distance and turn off smooth
-  lighting and fancy effects;
-- play in a smaller window, or on a Pi take the | off the
-  SDL_RISCOS_GL_RENDER_SIZE and SDL_RISCOS_GL_OVERLAY lines in !Run.
+Drawing is done by the CPU (riscos-mesa). The game draws at 640x360 and
+the picture is stretched to the window or the screen; on a Raspberry Pi
+with the VideoOverlay module the display does the stretching. To change
+it, set before running (or edit !Run):
+  ClassiCube$RenderSize   e.g. 480x270 (faster) or 854x480 (sharper),
+                          or full (the window's own size: slowest)
+  ClassiCube$Overlay      0 to stretch without the overlay
+In the game's options: a shorter view distance (default 128 here) helps
+on big server maps; smooth lighting and fancy effects cost speed.
 
 Problems
 --------

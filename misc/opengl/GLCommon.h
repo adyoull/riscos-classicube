@@ -76,6 +76,7 @@ typedef cc_uintptr GLpointer;
 #define GL_PERSPECTIVE_CORRECTION_HINT 0x0C50
 #define GL_FOG_HINT              0x0C54
 #define GL_NICEST                0x1102
+#define GL_FASTEST               0x1101
 #define GL_COMPILE               0x1300
 
 #define GL_MODELVIEW             0x1700

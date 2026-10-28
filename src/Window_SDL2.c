@@ -8,6 +8,10 @@
 #include "Bitmap.h"
 #include "Errors.h"
 #include <SDL2/SDL.h>
+#ifdef CC_BUILD_RISCOS
+#include <stdlib.h>
+#include <sched.h>
+#endif
 
 static SDL_Window* win_handle;
 
@@ -100,8 +104,28 @@ static void DoCreateWindow(int width, int height, int flags) {
 }
 
 void Window_Create2D(int width, int height) { DoCreateWindow(width, height, 0); }
+
+#if defined CC_BUILD_RISCOS && CC_GFX_BACKEND_IS_GL()
+/* riscos-mesa's SDL draws in software: draw the game at a smaller size and */
+/*  let EGL stretch it to the window or screen (on a Raspberry Pi with the */
+/*  VideoOverlay module the display does it, for nothing). */
+/*  ClassiCube$RenderSize: WxH (default 640x360), or "full" for the window's */
+/*  own size. ClassiCube$Overlay 0: stretch without the overlay. */
+static void RISCOS_SetRenderHints(void) {
+	const char* size = getenv("ClassiCube$RenderSize");
+	const char* ovl  = getenv("ClassiCube$Overlay");
+
+	if (!size || !size[0]) size = "640x360";
+	if (SDL_strcasecmp(size, "full") == 0) return;
+	SDL_SetHint("SDL_RISCOS_GL_RENDER_SIZE", size);
+	SDL_SetHint("SDL_RISCOS_GL_OVERLAY", ovl && ovl[0] == '0' ? "0" : "1");
+}
+#endif
 #if CC_GFX_BACKEND_IS_GL()
 void Window_Create3D(int width, int height) {
+#ifdef CC_BUILD_RISCOS
+	RISCOS_SetRenderHints();
+#endif
 	SetGLAttributes();
 	DoCreateWindow(width, height, SDL_WINDOW_OPENGL);
 }
@@ -574,6 +598,11 @@ void* GLContext_GetAddress(const char* function) {
 
 cc_bool GLContext_SwapBuffers(void) {
 	SDL_GL_SwapWindow(win_handle);
+#ifdef CC_BUILD_RISCOS
+	/* UnixLib's threads take turns on a timer: give the sound and download */
+	/*  threads their turn every frame (as the VCMI port does) */
+	sched_yield();
+#endif
 	return true;
 }
 

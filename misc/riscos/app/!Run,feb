@@ -25,10 +25,12 @@ RMEnsure StreamManager 0.03 IfThere System:Modules.StreamMan Then RMLoad System:
 RMEnsure SharedSoundBuffer 0.07 IfThere System:Modules.SSBuffer Then RMLoad System:Modules.SSBuffer
 RMEnsure SharedSoundBuffer 0.07 RMEnsure DigitalRenderer 0.51 IfThere System:Modules.DRenderer Then RMLoad System:Modules.DRenderer
 |
-| Raspberry Pi: draw at a smaller size and let the display stretch it.
-| Take the | off these lines to try it.
-|Set SDL_RISCOS_GL_RENDER_SIZE 640x480
-|Set SDL_RISCOS_GL_OVERLAY 1
+| Drawing is done by the CPU, so the game draws at 640x360 and the picture
+| is stretched to the window or screen (on a Raspberry Pi with VideoOverlay
+| the display does that, for nothing). Set these before running to change:
+|   ClassiCube$RenderSize  WxH (fewer pixels = faster), or full
+|   ClassiCube$Overlay     0 to stretch without the overlay
+If "<ClassiCube$RenderSize>" = "" Then Set ClassiCube$RenderSize 640x360
 RMEnsure VideoOverlay 0.00 IfThere System:Modules.VideoOverlay Then RMLoad System:Modules.VideoOverlay
 |
 | Options, downloaded resources, maps, screenshots and texture packs

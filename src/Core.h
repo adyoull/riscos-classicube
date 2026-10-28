@@ -282,6 +282,7 @@ typedef cc_uint8  cc_bool;
 	#define DEFAULT_WIN_BACKEND CC_WIN_BACKEND_SDL2
 	#undef  CC_BUILD_FREETYPE
 	#undef  CC_BUILD_PLUGINS /* no dlopen: everything is linked statically */
+	#define CC_GL_FASTEST_HINTS /* riscos-mesa's NEON fast route (Graphics_GL1.c) */
 #elif defined PLAT_AMIGA
 	#undef  CC_BUILD_FREETYPE
 	#define CC_BUILD_AMIGA

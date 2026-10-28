@@ -417,7 +417,14 @@ static void Gfx_RestoreState(void) {
 	gfx_fogDensity = -1.0f;
 	gfx_fogMode    = -1;
 
+#if defined CC_GL_FASTEST_HINTS
+	/* Software GL (riscos-mesa on RISC OS): fog worked out per vertex, and */
+	/*  perspective texturing a few pixels at a time (its NEON fast route) */
+	_glHint(GL_FOG_HINT, GL_FASTEST);
+	_glHint(GL_PERSPECTIVE_CORRECTION_HINT, GL_FASTEST);
+#else
 	_glHint(GL_FOG_HINT, GL_NICEST);
+#endif
 #if defined CC_BUILD_SYMBIAN
 	_glHint(GL_PERSPECTIVE_CORRECTION_HINT, GL_NICEST);
 #endif

@@ -43,6 +43,8 @@ extern cc_string Game_Mppass;
 	#define DEFAULT_VIEWDIST 64
 #elif defined CC_BUILD_NDS
     #define DEFAULT_VIEWDIST 192
+#elif defined CC_BUILD_RISCOS
+    #define DEFAULT_VIEWDIST 128 /* software GL: big servers' maps */
 #else
     #define DEFAULT_VIEWDIST 512
 #endif
