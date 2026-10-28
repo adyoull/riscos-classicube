@@ -1,8 +1,9 @@
 # ClassiCube for RISC OS
 
 RISC OS 5 on ARMv7 (VFPv3): Raspberry Pi 2 and later, and other Cortex-A
-boards. A static ELF built with GCCSDK's GCC 10 (riscos-crossdev toolchain)
-against the riscos-mesa devkit (20.3.5-17 or later).
+boards. An Absolute (AIF) program: a static ELF built with GCCSDK's GCC 10 (riscos-crossdev toolchain)
+against the riscos-mesa devkit (20.3.5-17 or later), then `elf2aif -e`
+(WimpSlot 20480K in `!Run`).
 
 | Part | How |
 |---|---|
@@ -11,6 +12,7 @@ against the riscos-mesa devkit (20.3.5-17 or later).
 | Graphics | `Graphics_GL1.c`: OpenGL 1.x, riscos-mesa (software, NEON fast paths) |
 | Sound | `Audio_OpenAL.c`: the devkit's OpenAL Soft, through SDL (SharedSoundBuffer or DigitalRenderer) |
 | TLS | `SSL.c` `CC_SSL_BACKEND_ACORNSSL`: the AcornSSL module (`AcornSSL_CreateSession` on the connected socket, SNI, non-blocking with sleeps) |
+| Sockets | `Platform_Posix.c` `Socket_Poll`: the Internet module says a still-connecting socket is writable, so on RISC OS it also checks `getpeername` / `SO_ERROR` (otherwise the first send fails with ENOTCONN, error 57) |
 | HTTP | `Http_Worker.c`: non-blocking sockets with sleeps between tries, because a blocking SWI stops every thread in the task |
 
 ## Build
@@ -27,9 +29,13 @@ against the riscos-mesa devkit (20.3.5-17 or later).
   VFPv3 only, UnixLib ticker block.
 - `$RCD_DIR/checks/check-unaligned.sh -s misc/riscos/unaligned-safe.txt src/*.c`:
   10 casts, all checked by hand (in the safe list).
-- `make -C misc/riscos/tests RCD_DIR=<riscos-crossdev> check`: the AcornSSL
-  backend against fake SWIs, as ARM under qemu-arm-aligntrap (handshake
-  retries, timeouts, error text, closing; mutants caught).
+- `make -C misc/riscos/tests RCD_DIR=<riscos-crossdev> DEVKIT=<devkit> check`,
+  as ARM under qemu-arm-aligntrap:
+  - test_acornssl: the AcornSSL backend against fake SWIs (handshake
+    retries, timeouts, error text, closing);
+  - test_socketpoll: Socket_Poll's connect check, with poll/getpeername/
+    getsockopt faked by `--wrap` (still connecting, connected, refused).
+  Both catch deliberate mutants.
 - The portable code as ARM Linux (terminal window, software renderer) under
   qemu-arm-aligntrap -cpu cortex-a8: a singleplayer world generates and
   renders with no alignment trap.

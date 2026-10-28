@@ -1,7 +1,8 @@
 #!/bin/bash
 # Make dist/!ClassiCube and dist/ClassiCube-riscos.zip from a RISC OS build.
 #   misc/riscos/package.sh [VERSION]
-# Needs: ClassiCube,e1f (make riscos RELEASE=1 RISCOS_DEVKIT=...),
+# Needs: ClassiCube,e1f (make riscos RELEASE=1 RISCOS_DEVKIT=...; stripped),
+# elf2aif (riscos-crossdev toolchain: ELF2AIF, or on the PATH),
 # RISCOS_DEVKIT (for PThreadTicker), RCD_DIR (riscos-crossdev: png2sprite,
 # rozip) and python3 with PIL (to scale the icon).
 set -e
@@ -12,7 +13,9 @@ VER=${1:-dev}
 APP='dist/!ClassiCube'
 rm -rf "$APP" && mkdir -p "$APP"
 cp misc/riscos/app/* "$APP/"
-cp ClassiCube,e1f "$APP/!RunImage,e1f"
+# An Absolute (AIF) file: runs without the !SharedLibs ELF loader, and
+# !Run's WimpSlot applies to it
+"${ELF2AIF:-elf2aif}" -e ClassiCube,e1f "$APP/!RunImage,ff8"
 cp license.txt "$APP/Licence,fff"
 cp "$RISCOS_DEVKIT/riscos/PThrTicker,ffa" "$RISCOS_DEVKIT/riscos/PThreadTicker-Licence,fff" "$APP/"
 python3 - <<'PY'

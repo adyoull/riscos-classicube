@@ -850,6 +850,27 @@ cc_result Socket_Write(cc_socket s, const cc_uint8* data, cc_uint32 count, cc_ui
 	*modified = 0; return errno;
 }
 
+#ifdef CC_BUILD_RISCOS
+/* The Internet module reports a socket that is still connecting as writable, */
+/*  so a send straight after would fail with ENOTCONN (error 57). Only count */
+/*  it as writable once connected, and report a failed connect's error. */
+static cc_result Socket_CheckConnecting(cc_socket s, cc_bool* success) {
+	union { struct sockaddr sa; struct sockaddr_in in4; struct sockaddr_in6 in6; } peer;
+	socklen_t len = sizeof(peer);
+	int err = 0;
+	socklen_t errLen = sizeof(err);
+
+	if (getpeername(s, &peer.sa, &len) == 0) return 0; /* connected */
+	if (errno != ENOTCONN) return 0; /* let the write report it */
+
+	if (getsockopt(s, SOL_SOCKET, SO_ERROR, &err, &errLen) == 0 && err) {
+		*success = false; return err; /* the connect failed */
+	}
+	*success = false; /* still connecting */
+	return 0;
+}
+#endif
+
 #if defined CC_BUILD_DARWIN || defined CC_BUILD_BEOS
 /* poll is broken on old OSX apparently https://daniel.haxx.se/docs/poll-vs-select.html */
 /* BeOS lacks support for poll */
@@ -886,6 +907,9 @@ cc_result Socket_Poll(cc_socket s, int timeoutMS, int mode, cc_bool* success) {
 	/* to match select, closed socket still counts as readable */
 	flags    = mode == SOCKET_POLL_READ ? (POLLIN | POLLHUP) : POLLOUT;
 	*success = (pfd.revents & flags) != 0;
+#ifdef CC_BUILD_RISCOS
+	if (*success && mode == SOCKET_POLL_WRITE) return Socket_CheckConnecting(s, success);
+#endif
 	return 0;
 }
 #endif

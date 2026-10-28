@@ -204,7 +204,7 @@ static cc_result HttpSocket_Connect(cc_socket s, const void* addr, int addrSize)
 	for (beg = Stopwatch_Measure();;)
 	{
 		if ((res = Socket_Poll(s, 0, SOCKET_POLL_WRITE, &ok))) return res;
-		if (ok) return 0; /* as Server.c: a failed connect shows up on the first write */
+		if (ok) return 0; /* Socket_Poll only says writable once connected (RISC OS check in Platform_Posix.c) */
 
 		if (Stopwatch_ElapsedMS(beg, Stopwatch_Measure()) > HTTP_RISCOS_TIMEOUT_MS)
 			return ReturnCode_SocketInProgess;
