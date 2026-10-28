@@ -60,6 +60,10 @@ static void ChunkInfo_Init(struct ChunkInfo* chunk, int x, int y, int z) {
 	chunk->noData   = true;
 	chunk->dirty    = true;
 	chunk->skipClip = false;
+#ifdef CC_BUILD_CAVECULL
+	Mem_Set(chunk->links, 0x3F, FACE_COUNT); /* until built: see-through */
+	chunk->reachable = true;
+#endif
 
 	chunk->drawXMin = false; chunk->drawXMax = false; chunk->drawZMin = false;
 	chunk->drawZMax = false; chunk->drawYMin = false; chunk->drawYMax = false;
@@ -68,11 +72,20 @@ static void ChunkInfo_Init(struct ChunkInfo* chunk, int x, int y, int z) {
 	chunk->translucentParts = NULL;
 }
 
+#ifdef CC_BUILD_CAVECULL
+static cc_bool cullDirty = true;
+#endif
+
 static CC_INLINE void ChunkInfo_Refresh(struct ChunkInfo* chunk) {
 	if (chunk->allAir) return; /* do not recreate chunks completely air */
 
 	chunk->empty = false;
 	chunk->dirty = true;
+#ifdef CC_BUILD_CAVECULL
+	/* a changed block may open a way through: see-through until rebuilt */
+	Mem_Set(chunk->links, 0x3F, FACE_COUNT);
+	cullDirty = true;
+#endif
 }
 
 /* Index of maximum used 1D atlas + 1 */
@@ -377,6 +390,9 @@ static void BuildChunk(struct ChunkInfo* chunk, int* chunkUpdates) {
 
 	Game.ChunkUpdates++;
 	(*chunkUpdates)++;
+#ifdef CC_BUILD_CAVECULL
+	cullDirty = true; /* its links may have changed */
+#endif
 	if (!Builder_MakeChunk(chunk)) return;
 
 	chunk->dirty  = false;
@@ -409,7 +425,108 @@ static void FreeParts(void) {
 	MapRenderer_PartsTranslucent = NULL;
 }
 
+#ifdef CC_BUILD_CAVECULL
+/*########################################################################################################################*
+*-------------------------------------------------------Cave culling------------------------------------------------------*
+*#########################################################################################################################*/
+/* Flood fill outwards from the chunk the camera is in, through the faces */
+/*  each chunk's see-through blocks connect (ChunkInfo.links, worked out */
+/*  by the builder), never going back towards the camera. Chunks it */
+/*  doesn't reach can't be seen (e.g. caves deep underground), so they */
+/*  aren't drawn. As Minecraft's "advanced culling" (Tommaso Checchi). */
+static int*      cull_queue;
+static cc_uint8* cull_from;  /* face the fill came in through */
+static cc_uint8* cull_dirs;  /* directions travelled so far */
+
+static void CaveCull_Alloc(void) {
+	cull_queue = (int*)Mem_Alloc(chunksCount, sizeof(int), "cull queue");
+	cull_from  = (cc_uint8*)Mem_Alloc(chunksCount, 1, "cull from");
+	cull_dirs  = (cc_uint8*)Mem_Alloc(chunksCount, 1, "cull dirs");
+}
+
+static void CaveCull_Free(void) {
+	Mem_Free(cull_queue); cull_queue = NULL;
+	Mem_Free(cull_from);  cull_from  = NULL;
+	Mem_Free(cull_dirs);  cull_dirs  = NULL;
+}
+
+static void CaveCull_Push(int index, int from, int dirs, int* tail) {
+	if (mapChunks[index].reachable) return;
+	mapChunks[index].reachable = true;
+	cull_queue[*tail] = index; cull_from[*tail] = from; cull_dirs[*tail] = dirs; (*tail)++;
+}
+
+static void CaveCull_Update(void) {
+	static const int dx[FACE_COUNT] = { -1, 1, 0, 0, 0, 0 };
+	static const int dy[FACE_COUNT] = {  0, 0, 0, 0,-1, 1 };
+	static const int dz[FACE_COUNT] = {  0, 0,-1, 1, 0, 0 };
+	struct ChunkInfo* chunk;
+	int head = 0, tail = 0, i, f, cx, cy, cz, nx, ny, nz, away = 0;
+	IVec3 pos;
+	cullDirty = false;
+
+	IVec3_Floor(&pos, &Camera.CurrentPos);
+	for (i = 0; i < chunksCount; i++) mapChunks[i].reachable = false;
+
+	if (World_Contains(pos.x, pos.y, pos.z)) {
+		/* inside a solid block (noclip): the faces of the block it's in */
+		/*  aren't drawn and the camera sees straight through, so no culling */
+		if (Blocks.FullOpaque[World_GetBlock(pos.x, pos.y, pos.z)]) {
+			for (i = 0; i < chunksCount; i++) mapChunks[i].reachable = true;
+			return;
+		}
+		CaveCull_Push(World_ChunkPack(pos.x >> CHUNK_SHIFT, pos.y >> CHUNK_SHIFT, pos.z >> CHUNK_SHIFT), 0xFF, 0, &tail);
+	} else {
+		/* outside the world (above it, past the edges): start from the */
+		/*  chunks on the sides of the world facing the camera, travelling */
+		/*  away from it */
+		if (pos.x < 0)             away |= 1 << FACE_XMAX;
+		if (pos.x >= World.Width)  away |= 1 << FACE_XMIN;
+		if (pos.z < 0)             away |= 1 << FACE_ZMAX;
+		if (pos.z >= World.Length) away |= 1 << FACE_ZMIN;
+		if (pos.y < 0)             away |= 1 << FACE_YMAX;
+		if (pos.y >= World.Height) away |= 1 << FACE_YMIN;
+
+		for (cy = 0; cy < World.ChunksY; cy++)
+			for (cz = 0; cz < World.ChunksZ; cz++)
+				for (cx = 0; cx < World.ChunksX; cx++)
+		{
+			if (((away & (1 << FACE_XMAX)) && cx == 0) || ((away & (1 << FACE_XMIN)) && cx == World.ChunksX - 1) ||
+				((away & (1 << FACE_ZMAX)) && cz == 0) || ((away & (1 << FACE_ZMIN)) && cz == World.ChunksZ - 1) ||
+				((away & (1 << FACE_YMAX)) && cy == 0) || ((away & (1 << FACE_YMIN)) && cy == World.ChunksY - 1)) {
+				CaveCull_Push(World_ChunkPack(cx, cy, cz), 0xFF, away, &tail);
+			}
+		}
+	}
+
+	while (head < tail)
+	{
+		i     = cull_queue[head];
+		chunk = &mapChunks[i];
+		cx = (chunk->centreX - HALF_CHUNK_SIZE) >> CHUNK_SHIFT;
+		cy = (chunk->centreY - HALF_CHUNK_SIZE) >> CHUNK_SHIFT;
+		cz = (chunk->centreZ - HALF_CHUNK_SIZE) >> CHUNK_SHIFT;
+
+		for (f = 0; f < FACE_COUNT; f++)
+		{
+			/* never back towards the camera */
+			if (cull_dirs[head] & (1 << (f ^ 1))) continue;
+			/* out through f only if it connects to the face the fill came in by */
+			if (cull_from[head] != 0xFF && !(chunk->links[cull_from[head]] & (1 << f))) continue;
+
+			nx = cx + dx[f]; ny = cy + dy[f]; nz = cz + dz[f];
+			if (nx < 0 || ny < 0 || nz < 0 || nx >= World.ChunksX || ny >= World.ChunksY || nz >= World.ChunksZ) continue;
+			CaveCull_Push(World_ChunkPack(nx, ny, nz), f ^ 1, cull_dirs[head] | (1 << f), &tail);
+		}
+		head++;
+	}
+}
+#endif
+
 static void FreeChunks(void) {
+#ifdef CC_BUILD_CAVECULL
+	CaveCull_Free();
+#endif
 	Mem_Free(mapChunks);
 	Mem_Free(sortedChunks);
 	Mem_Free(renderChunks);
@@ -435,6 +552,10 @@ static void AllocateChunks(void) {
 	sortedChunks = (struct ChunkInfo**)Mem_Alloc(chunksCount, sizeof(struct ChunkInfo*), "sorted chunk info");
 	renderChunks = (struct ChunkInfo**)Mem_Alloc(chunksCount, sizeof(struct ChunkInfo*), "render chunk info");
 	distances    = (cc_uint32*)Mem_Alloc(chunksCount, 4, "chunk distances");
+#ifdef CC_BUILD_CAVECULL
+	CaveCull_Alloc();
+	cullDirty = true;
+#endif
 }
 
 static void ResetPartFlags(void) {
@@ -584,6 +705,9 @@ static int UpdateChunksAndVisibility(int* chunkUpdates) {
 		} else {
 			res = Frustum_TestSphere(chunk->centreX, chunk->centreY, chunk->centreZ, 14); /* 14 ~ sqrt(3 * 8^2) */
 			chunk->visible  = res != FRUSTUM_OUTSIDE;
+#ifdef CC_BUILD_CAVECULL
+			chunk->visible &= chunk->reachable;
+#endif
 			chunk->skipClip = Gfx_CanSphereSkipClipping(chunk->centreX, chunk->centreY, chunk->centreZ, 14);
 		}
 
@@ -620,6 +744,9 @@ static int UpdateChunksStill(int* chunkUpdates) {
 			} else {
 				res = Frustum_TestSphere(chunk->centreX, chunk->centreY, chunk->centreZ, 14); /* 14 ~ sqrt(3 * 8^2) */
 				chunk->visible  = res != FRUSTUM_OUTSIDE;
+#ifdef CC_BUILD_CAVECULL
+				chunk->visible &= chunk->reachable;
+#endif
 				chunk->skipClip = Gfx_CanSphereSkipClipping(chunk->centreX, chunk->centreY, chunk->centreZ, 14);
 			}
 
@@ -631,6 +758,9 @@ static int UpdateChunksStill(int* chunkUpdates) {
 	return j;
 }
 
+#ifdef CC_BUILD_CAVECULL
+static IVec3 cullChunk;
+#endif
 static void UpdateChunks(float delta) {
 	struct LocalPlayer* p;
 	cc_bool samePos;
@@ -643,6 +773,15 @@ static void UpdateChunks(float delta) {
 	p = Entities.CurPlayer;
 	samePos = Vec3_Equals(&Camera.CurrentPos, &lastCamPos)
 		&& p->Base.Pitch == lastPitch && p->Base.Yaw == lastYaw;
+#ifdef CC_BUILD_CAVECULL
+	/* chunks rebuilt or changed, or the camera into another chunk: fill */
+	/*  again, and check every chunk's visibility */
+	if (cullDirty || cullChunk.x != chunkPos.x || cullChunk.y != chunkPos.y || cullChunk.z != chunkPos.z) {
+		CaveCull_Update();
+		cullChunk = chunkPos;
+		samePos   = false;
+	}
+#endif
 
 	renderChunksCount = samePos ?
 		UpdateChunksStill(&chunkUpdates) :

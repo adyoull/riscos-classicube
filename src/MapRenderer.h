@@ -60,6 +60,12 @@ struct ChunkInfo {
 #endif
 	struct ChunkPartInfo* normalParts;
 	struct ChunkPartInfo* translucentParts;
+#ifdef CC_BUILD_CAVECULL
+	/* For each face, the faces it connects to through see-through blocks */
+	/*  (bit per face). Lets chunks the camera can't see into be skipped. */
+	cc_uint8 links[FACE_COUNT];
+	cc_uint8 reachable;
+#endif
 };
 
 /* Renders the meshes of non-translucent blocks in visible chunks. */

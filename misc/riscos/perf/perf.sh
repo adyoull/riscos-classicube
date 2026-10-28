@@ -8,7 +8,7 @@
 #                                 to out/prof.txt, report to out/report.txt
 # Needs: arm-linux-gnueabihf-gcc/g++, qemu-arm, RISCOS_DEVKIT.
 set -euo pipefail
-HERE=$(cd "$(dirname "$0")" && pwd); SRC=$HERE/../../../src; OUT=${OUT:-$HERE/out}
+HERE=$(cd "$(dirname "$0")" && pwd); SRC=${SRC:-$HERE/../../../src}; OUT=${OUT:-$HERE/out}
 : "${RISCOS_DEVKIT:?set RISCOS_DEVKIT}"
 mkdir -p "$OUT/obj"
 case ${1:-} in
@@ -23,7 +23,7 @@ build)
         echo "--redefine-sym pthread_$f=ro_pthread_${f}_shim"; done) "$OUT/libOSMesa.a"
   arm-linux-gnueabihf-gcc -c -O2 -mfloat-abi=hard "$HERE/shim.c" -o "$OUT/shim.o"
   arm-linux-gnueabihf-g++ -static -o "$OUT/cc-perf" "$OUT"/obj/*.o "$OUT/shim.o" "$OUT/libOSMesa.a" \
-    "$RISCOS_DEVKIT/lib/libz.a" -lm -lpthread -Wl,--wrap=Random_SeedFromCurrentTime -Wl,-Map="$OUT/cc-perf.map" 2>&1 | grep -v "warning\|NOTE" || true
+    "$RISCOS_DEVKIT/lib/libz.a" -lm -lpthread -Wl,--wrap=Random_SeedFromCurrentTime,--wrap=EnvRenderer_RenderSky,--wrap=EnvRenderer_RenderClouds,--wrap=EnvRenderer_RenderMapSides,--wrap=EnvRenderer_RenderMapEdges,--wrap=MapRenderer_RenderNormal,--wrap=MapRenderer_RenderTranslucent,--wrap=Entities_RenderModels,--wrap=HeldBlockRenderer_Render,--wrap=Gui_RenderGui,--wrap=Particles_Render,--wrap=Gfx_SetAlphaTest,--wrap=Gfx_SetFog,--wrap=Gfx_UpdateTexture -Wl,-Map="$OUT/cc-perf.map" 2>&1 | grep -v "warning\|NOTE" || true
   ls -la "$OUT/cc-perf";;
 run)
   shift; D=$OUT/run; rm -rf "$D"; mkdir -p "$D/texpacks"

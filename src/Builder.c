@@ -1,4 +1,5 @@
 #include "Builder.h"
+#include "CaveCull.h"
 #include "Constants.h"
 #include "World.h"
 #include "Funcs.h"
@@ -360,6 +361,33 @@ static void OutputChunkPartsMeta(int x, int y, int z, struct ChunkInfo* info) {
 	}
 }
 
+#ifdef CC_BUILD_CAVECULL
+/* Which faces of the chunk connect to which others through blocks that */
+/*  aren't fully opaque (flood fill of each see-through region). The map */
+/*  renderer uses this to skip chunks the camera can't see into, e.g. */
+/*  caves underground (cave culling). Cells outside the world count as */
+/*  see-through, which errs towards drawing. */
+static void Builder_CalcLinks(struct ChunkInfo* info, cc_bool allAir, cc_bool allSolid) {
+	cc_uint16 pass[CHUNK_SIZE * CHUNK_SIZE];
+	int row, xx, yy, zz, src, m;
+	Mem_Set(info->links, allAir ? 0x3F : 0, FACE_COUNT);
+	if (allAir || allSolid) return;
+
+	/* rows of 16 cells along X as bit masks: row = yy * 16 + zz, bit = xx */
+	for (yy = 0, row = 0; yy < CHUNK_SIZE; yy++)
+		for (zz = 0; zz < CHUNK_SIZE; zz++, row++)
+	{
+		src = Builder_PackChunk(0, yy, zz); m = 0;
+		for (xx = 0; xx < CHUNK_SIZE; xx++, src++)
+		{
+			if (!Blocks.FullOpaque[Builder_Chunk[src]]) m |= 1 << xx;
+		}
+		pass[row] = m;
+	}
+	CaveCull_CalcLinks(pass, info->links);
+}
+#endif
+
 cc_bool Builder_MakeChunk(struct ChunkInfo* info) {
 #if CC_BUILD_MAXSTACK <= (32 * 1024)
 	void* mem        = TempMem_Alloc((EXTCHUNK_SIZE_3 * sizeof(BlockID)) + (CHUNK_SIZE_3 * FACE_COUNT));
@@ -402,6 +430,9 @@ cc_bool Builder_MakeChunk(struct ChunkInfo* info) {
 	}
 
 	info->allAir = allAir;
+#ifdef CC_BUILD_CAVECULL
+	Builder_CalcLinks(info, allAir, allSolid);
+#endif
 	if (allAir || allSolid) return true;
 	Lighting.LightHint(x1 - 1, y1 - 1, z1 - 1);
 
