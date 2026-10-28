@@ -1,0 +1,10 @@
+# check-unaligned.sh -s list: casts checked by hand (RISC OS port)
+# malloc'd buffer (8-aligned)
+bmp->scan0 = \(BitmapCol\*\)data
+# downcasts of widgets/screens allocated with their full type
+\(struct LTable\*\)w
+\(struct ServersScreen\*\)s_
+# cc_sockaddr.data follows an int: 4-aligned, enough for sockaddr_in
+\(struct sockaddr_in\*\)addr->data
+\(struct sockaddr_in\*\)dst->data
+\(union SocketAddress\*\)dst->data

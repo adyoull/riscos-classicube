@@ -184,6 +184,67 @@ struct HttpConnection {
 	cc_bool valid;
 };
 
+#ifdef CC_BUILD_RISCOS
+/* On RISC OS each UnixLib socket call is one SWI to the Internet module, and */
+/*  a blocking one stops every thread in the task, the game included. So the  */
+/*  worker uses non-blocking sockets and sleeps between tries, letting the    */
+/*  game thread run while it waits. */
+#define HTTP_RISCOS_TIMEOUT_MS (60 * 1000)
+#define HTTP_RISCOS_POLL_MS    5
+
+static cc_result HttpSocket_Connect(cc_socket s, const void* addr, int addrSize) {
+	cc_uint64 beg;
+	cc_bool ok;
+	cc_result res;
+
+	if ((res = Socket_SetNonBlocking(s, true))) return res;
+	res = Socket_Connect(s, addr, addrSize);
+	if (res != ReturnCode_SocketInProgess && res != ReturnCode_SocketWouldBlock) return res;
+
+	for (beg = Stopwatch_Measure();;)
+	{
+		if ((res = Socket_Poll(s, 0, SOCKET_POLL_WRITE, &ok))) return res;
+		if (ok) return 0; /* as Server.c: a failed connect shows up on the first write */
+
+		if (Stopwatch_ElapsedMS(beg, Stopwatch_Measure()) > HTTP_RISCOS_TIMEOUT_MS)
+			return ReturnCode_SocketInProgess;
+		Thread_Sleep(HTTP_RISCOS_POLL_MS);
+	}
+}
+
+static cc_result HttpSocket_Read(cc_socket s, cc_uint8* data, cc_uint32 count, cc_uint32* read) {
+	cc_uint64 beg = Stopwatch_Measure();
+	cc_result res;
+
+	for (;;)
+	{
+		res = Socket_Read(s, data, count, read);
+		if (res != ReturnCode_SocketWouldBlock) return res;
+
+		if (Stopwatch_ElapsedMS(beg, Stopwatch_Measure()) > HTTP_RISCOS_TIMEOUT_MS) return res;
+		Thread_Sleep(HTTP_RISCOS_POLL_MS);
+	}
+}
+
+static cc_result HttpSocket_Write(cc_socket s, const cc_uint8* data, cc_uint32 count, cc_uint32* sent) {
+	cc_uint64 beg = Stopwatch_Measure();
+	cc_result res;
+
+	for (;;)
+	{
+		res = Socket_Write(s, data, count, sent);
+		if (res != ReturnCode_SocketWouldBlock) return res;
+
+		if (Stopwatch_ElapsedMS(beg, Stopwatch_Measure()) > HTTP_RISCOS_TIMEOUT_MS) return res;
+		Thread_Sleep(HTTP_RISCOS_POLL_MS);
+	}
+}
+#else
+#define HttpSocket_Connect Socket_Connect
+#define HttpSocket_Read    Socket_Read
+#define HttpSocket_Write   Socket_Write
+#endif
+
 static void HttpConnection_Close(struct HttpConnection* conn) {
 	if (conn->sslCtx) {
 		SSL_Free(conn->sslCtx);
@@ -226,7 +287,7 @@ static cc_result HttpConnection_Open(struct HttpConnection* conn, const struct H
 		String_InitArray(addrStr, addrBuf);
 		if (SockAddr_ToString(&addrs[i], &addrStr)) Platform_Log1("  Connecting to %s..", &addrStr);
 
-		res = Socket_Connect(conn->socket, addrs[i].data, addrs[i].size);
+		res = HttpSocket_Connect(conn->socket, addrs[i].data, addrs[i].size);
 		if (res) { HttpConnection_Close(conn); continue; }
 
 		break; /* Successful connection */
@@ -242,14 +303,14 @@ static cc_result HttpConnection_Read(struct HttpConnection* conn, cc_uint8* data
 	if (conn->sslCtx)
 		return SSL_Read(conn->sslCtx, data, count, read);
 
-	return Socket_Read(conn->socket,  data, count, read);
+	return HttpSocket_Read(conn->socket,  data, count, read);
 }
 
 static cc_result HttpConnection_Write(struct HttpConnection* conn, const cc_uint8* data, cc_uint32 count, cc_uint32* sent) {
 	if (conn->sslCtx) 
 		return SSL_Write(conn->sslCtx, data, count, sent);
 
-	return Socket_Write(conn->socket, data, count, sent);
+	return HttpSocket_Write(conn->socket, data, count, sent);
 }
 
 static cc_result HttpConnection_WriteAll(struct HttpConnection* conn, const cc_uint8* data, cc_uint32 count) {

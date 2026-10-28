@@ -48,7 +48,8 @@ const char* Platform_AppNameSuffix = " iOS alpha";
 const char* Platform_AppNameSuffix = "";
 #endif
 
-#ifdef CC_BUILD_MOBILE
+#if defined CC_BUILD_MOBILE || defined CC_BUILD_RISCOS
+/* RISC OS: the launcher starts the game in the same task (no fork/exec) */
 cc_uint8 Platform_Flags = PLAT_FLAG_SINGLE_PROCESS;
 #else
 cc_uint8 Platform_Flags;
@@ -1041,6 +1042,23 @@ cc_result Process_StartOpen(const cc_string* args) {
 	
 	return 0;
 }
+#elif defined CC_BUILD_RISCOS
+#include <kernel.h>
+#define XURI_Dispatch (0x4E381 | 0x20000)
+
+cc_result Process_StartOpen(const cc_string* args) {
+	char str[NATIVE_STR_LEN];
+	_kernel_swi_regs r;
+	_kernel_oserror* e;
+	String_EncodeUtf8(str, args);
+
+	/* the URI module passes it to the browser (or whatever handles it) */
+	r.r[0] = 0;
+	r.r[1] = (int)str;
+	r.r[2] = 0;
+	e = _kernel_swi(XURI_Dispatch, &r, &r);
+	return e ? (cc_result)e->errnum : 0;
+}
 #else
 cc_result Process_StartOpen(const cc_string* args) {
 	char str[NATIVE_STR_LEN];
@@ -1141,6 +1159,18 @@ static cc_result Process_RawGetExePath(char* path, int* len) {
 	*len = file.length;
 	return 0;
 }
+#elif defined CC_BUILD_RISCOS
+static cc_result Process_RawGetExePath(char* path, int* len) {
+	/* !Run sets ClassiCube$Dir; the program is its !RunImage */
+	const char* dir = getenv("ClassiCube$Dir");
+	if (!dir) return ERR_NOT_SUPPORTED;
+
+	*len = String_CalcLen(dir, NATIVE_STR_LEN - 12);
+	Mem_Copy(path, dir, *len);
+	Mem_Copy(path + *len, ".!RunImage", 10);
+	*len += 10;
+	return 0;
+}
 #elif defined CC_BUILD_OS2
 static cc_result Process_RawGetExePath(char* path, int* len) {
 	PPIB pib;
@@ -1157,7 +1187,7 @@ static cc_result Process_RawGetExePath(char* path, int* len) {
 /*########################################################################################################################*
 *--------------------------------------------------------Updater----------------------------------------------------------*
 *#########################################################################################################################*/
-#ifdef CC_BUILD_FLATPAK
+#if defined CC_BUILD_FLATPAK || defined CC_BUILD_RISCOS
 cc_bool Updater_Supported = false;
 #else
 cc_bool Updater_Supported = true;
@@ -1295,7 +1325,58 @@ cc_result Updater_SetNewBuildTime(cc_uint64 timestamp) {
 /*########################################################################################################################*
 *-------------------------------------------------------Dynamic lib-------------------------------------------------------*
 *#########################################################################################################################*/
-#if defined USE_NS_DYNLOAD_API
+#if defined CC_BUILD_RISCOS
+/* RISC OS programs are linked statically (no shared libraries to dlopen), */
+/*  so the "libraries" are tables of the functions linked into the program. */
+#include <AL/al.h>
+#include <AL/alc.h>
+const cc_string DynamicLib_Ext = String_FromConst("");
+
+struct StaticSym { const char* name; void* addr; };
+#define STATIC_SYM(name) { #name, (void*)name }
+static const struct StaticSym openalSyms[] = {
+	STATIC_SYM(alcCreateContext), STATIC_SYM(alcMakeContextCurrent),
+	STATIC_SYM(alcDestroyContext), STATIC_SYM(alcOpenDevice),
+	STATIC_SYM(alcCloseDevice),    STATIC_SYM(alcGetError),
+	STATIC_SYM(alGetError),        STATIC_SYM(alGenSources),
+	STATIC_SYM(alDeleteSources),   STATIC_SYM(alGetSourcei),
+	STATIC_SYM(alSourcef),         STATIC_SYM(alSourcePlay),
+	STATIC_SYM(alSourcePause),     STATIC_SYM(alSourceStop),
+	STATIC_SYM(alSourceQueueBuffers), STATIC_SYM(alSourceUnqueueBuffers),
+	STATIC_SYM(alGenBuffers),      STATIC_SYM(alDeleteBuffers),
+	STATIC_SYM(alBufferData),      STATIC_SYM(alDistanceModel),
+	{ NULL, NULL }
+};
+static const char* staticLibError;
+
+static cc_bool String_CaselessEquals2(const char* a, const char* b) {
+	cc_string str = String_FromReadonly(a);
+	return String_CaselessEqualsConst(&str, b);
+}
+
+void* DynamicLib_Load2(const cc_string* path) {
+	/* Audio_OpenAL.c asks for "libopenal.so.1" */
+	static const cc_string openal = String_FromConst("libopenal");
+	if (String_CaselessStarts(path, &openal)) return (void*)openalSyms;
+	staticLibError = "not linked into this RISC OS build";
+	return NULL;
+}
+
+void* DynamicLib_Get2(void* lib, const char* name) {
+	const struct StaticSym* sym;
+	for (sym = (const struct StaticSym*)lib; sym->name; sym++)
+	{
+		if (String_CaselessEquals2(sym->name, name)) return sym->addr;
+	}
+	staticLibError = "function not linked into this RISC OS build";
+	return NULL;
+}
+
+cc_bool DynamicLib_DescribeError(cc_string* dst) {
+	if (staticLibError) String_AppendConst(dst, staticLibError);
+	return staticLibError != NULL;
+}
+#elif defined USE_NS_DYNLOAD_API
 /* Really old mac OS versions don't have the dlopen/dlsym API */
 const cc_string DynamicLib_Ext = String_FromConst(".dylib");
 
@@ -1668,6 +1749,15 @@ cc_result Platform_SetDefaultCurrentDirectory(void) {
 	char path[NATIVE_STR_LEN];
 	int i, len = 0;
 	cc_result res;
+#ifdef CC_BUILD_RISCOS
+	/* !Run sets ClassiCube$Data (normally <Choices$Write>.ClassiCube): */
+	/*  options, downloaded resources, maps and screenshots go there */
+	const char* data = getenv("ClassiCube$Data");
+	if (data) {
+		mkdir(data, 0777);
+		return chdir(data) == -1 ? errno : 0;
+	}
+#endif
 	if (!IsProblematicWorkingDirectory()) return 0;
 	
 	res = Process_RawGetExePath(path, &len);

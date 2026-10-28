@@ -160,6 +160,7 @@ typedef cc_uint8  cc_bool;
 
 #define CC_SSL_BACKEND_NONE      1
 #define CC_SSL_BACKEND_BEARSSL   2
+#define CC_SSL_BACKEND_ACORNSSL  3
 
 #define CC_NET_BACKEND_BUILTIN   1
 
@@ -269,12 +270,18 @@ typedef cc_uint8  cc_bool;
 	#define DEFAULT_NET_BACKEND CC_NET_BACKEND_BUILTIN
 	#define DEFAULT_GFX_BACKEND CC_GFX_BACKEND_SOFTGPU
 #elif defined __riscos__
+	/* UnixLib gives POSIX; riscos-mesa's SDL2 gives the window and an
+	   OpenGL 1.x context (software Mesa), and OpenAL Soft plays through SDL.
+	   TLS goes through the AcornSSL module (SSL.c). */
 	#define CC_BUILD_RISCOS
+	#define CC_BUILD_POSIX
 	#define DEFAULT_NET_BACKEND CC_NET_BACKEND_BUILTIN
-	#define DEFAULT_SSL_BACKEND CC_SSL_BACKEND_BEARSSL
+	#define DEFAULT_SSL_BACKEND CC_SSL_BACKEND_ACORNSSL
 	#define DEFAULT_AUD_BACKEND CC_AUD_BACKEND_OPENAL
-	#define DEFAULT_GFX_BACKEND CC_GFX_BACKEND_SOFTGPU
+	#define DEFAULT_GFX_BACKEND CC_GFX_BACKEND_GL1
+	#define DEFAULT_WIN_BACKEND CC_WIN_BACKEND_SDL2
 	#undef  CC_BUILD_FREETYPE
+	#undef  CC_BUILD_PLUGINS /* no dlopen: everything is linked statically */
 #elif defined PLAT_AMIGA
 	#undef  CC_BUILD_FREETYPE
 	#define CC_BUILD_AMIGA

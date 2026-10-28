@@ -1,0 +1,40 @@
+| !Run for !ClassiCube (RISC OS port)
+Set ClassiCube$Dir <Obey$Dir>
+IconSprites <ClassiCube$Dir>.!Sprites
+|
+| UnixLib and GCC 10's support module (both from PackMan)
+RMEnsure SharedUnixLibrary 1.16 RMLoad System:Modules.SharedULib
+RMEnsure SharedUnixLibrary 1.16 Error !ClassiCube needs SharedUnixLibrary 1.16 or later (from PackMan)
+RMEnsure ARMEABISupport 0.00 RMLoad System:Modules.ARMEABISupport
+RMEnsure ARMEABISupport 0.00 Error !ClassiCube needs ARMEABISupport (from PackMan)
+|
+| Downloads (the game's sounds and textures on first run, the server
+| list, signing in) are secure connections, made by the AcornSSL module
+| (RISC OS 5.28 or later)
+IfThere System:Modules.Network.URL.AcornSSL Then RMEnsure AcornSSL 0.00 RMLoad System:Modules.Network.URL.AcornSSL
+|
+| Downloads and sound run in their own threads: keep the thread timer's
+| code safe in memory while other programs run
+RMEnsure PThreadTicker 0.01 RMLoad <ClassiCube$Dir>.PThrTicker
+|
+| Sound: SharedSoundBuffer and StreamManager (ssb.zip from
+| https://orac.co.uk/software/rdpclient/rdpclient.html) if they're there,
+| otherwise DigitalRenderer
+RMEnsure SharedSound 1.07 IfThere System:Modules.SSound Then RMLoad System:Modules.SSound
+RMEnsure StreamManager 0.03 IfThere System:Modules.StreamMan Then RMLoad System:Modules.StreamMan
+RMEnsure SharedSoundBuffer 0.07 IfThere System:Modules.SSBuffer Then RMLoad System:Modules.SSBuffer
+RMEnsure SharedSoundBuffer 0.07 RMEnsure DigitalRenderer 0.51 IfThere System:Modules.DRenderer Then RMLoad System:Modules.DRenderer
+|
+| Raspberry Pi: draw at a smaller size and let the display stretch it.
+| Take the | off these lines to try it.
+|Set SDL_RISCOS_GL_RENDER_SIZE 640x480
+|Set SDL_RISCOS_GL_OVERLAY 1
+RMEnsure VideoOverlay 0.00 IfThere System:Modules.VideoOverlay Then RMLoad System:Modules.VideoOverlay
+|
+| Options, downloaded resources, maps, screenshots and texture packs
+If "<ClassiCube$Data>" = "" Then Set ClassiCube$Data <Choices$Write>.ClassiCube
+CDir <ClassiCube$Data>
+|
+| Messages go to a file instead of opening a command window
+Set ALSOFT_LOGFILE <Wimp$ScrapDir>.ClassiCubeAL
+Run <ClassiCube$Dir>.!RunImage > <Wimp$ScrapDir>.ClassiCubeLog 2>&1

@@ -232,3 +232,8 @@ UpgradeLog*.htm
 
 # Watcom
 *.err
+# RISC OS port
+ClassiCube,e1f
+ClassiCube-dbg.elf
+dist/
+misc/riscos/tests/out/

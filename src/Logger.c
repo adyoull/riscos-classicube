@@ -306,8 +306,8 @@ static void DumpFrame(cc_string* trace, void* addr) {
 	String_AppendString(trace, &str);
 	Logger_Log(&str);
 }
-#elif defined CC_BUILD_IRIX
-/* IRIX doesn't expose a nice interface for dladdr */
+#elif defined CC_BUILD_IRIX || defined CC_BUILD_RISCOS
+/* IRIX doesn't expose a nice interface for dladdr (RISC OS has no dladdr) */
 static void DumpFrame(cc_string* trace, void* addr) {
 	cc_uintptr addr_ = (cc_uintptr)addr;
 	String_Format1(trace, "%x", &addr_);

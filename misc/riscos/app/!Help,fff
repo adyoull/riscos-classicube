@@ -1,0 +1,47 @@
+ClassiCube for RISC OS
+======================
+
+ClassiCube is a free, open source game compatible with Minecraft
+Classic: build and explore in single player, or join the community's
+servers. https://www.classicube.net
+
+This is a port to RISC OS 5 on ARMv7 (Raspberry Pi 2 and later, and
+other Cortex-A boards with VFP). It draws with riscos-mesa's OpenGL
+(in software) through SDL 2.
+
+Needs
+-----
+- RISC OS 5.28 or later (for the AcornSSL module, used for downloads).
+- SharedUnixLibrary 1.16+ and ARMEABISupport, from PackMan.
+- For sound: SharedSoundBuffer and StreamManager (ssb.zip from
+  https://orac.co.uk/software/rdpclient/rdpclient.html), or
+  DigitalRenderer.
+
+First run
+---------
+The launcher offers to download the game's sounds, music and textures
+(a few MB). AcornSSL may ask whether to trust a server's certificate;
+choose Accept, or Accept always.
+
+Your options, worlds, screenshots and texture packs are kept in
+<Choices$Write>.ClassiCube (set ClassiCube$Data before running to
+use somewhere else).
+
+Speed
+-----
+Drawing is done by the CPU. If the game is slow:
+- in the game's options, lower the view distance and turn off smooth
+  lighting and fancy effects;
+- play in a smaller window, or on a Pi take the | off the
+  SDL_RISCOS_GL_RENDER_SIZE and SDL_RISCOS_GL_OVERLAY lines in !Run.
+
+Problems
+--------
+Messages are written to <Wimp$ScrapDir>.ClassiCubeLog (and OpenAL's to
+<Wimp$ScrapDir>.ClassiCubeAL).
+
+Licences
+--------
+ClassiCube: BSD 3-clause (Licence file). The PThreadTicker module:
+BSD (PThreadTicker-Licence). OpenAL Soft (LGPL), SDL 2 (zlib) and
+Mesa (MIT) are linked in; see riscos-mesa's devkit for their terms.
