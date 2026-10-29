@@ -11,7 +11,7 @@ against the riscos-mesa devkit (20.3.5-17 or later), then `elf2aif -e`
 | Window, input | `Window_SDL2.c` on riscos-mesa's SDL2 (RISC OS video driver with GL). That driver reports no keyboard focus (so the window counts as focused: otherwise the pause menu comes straight back) and has no relative mouse mode or pointer warp (so mouse look reads the mouse with OS_Word 21,4 and puts it back in the middle of the game's window with OS_Word 21,3, the window found with Wimp_GetPointerInfo) |
 | Graphics | `Graphics_GL1.c`: OpenGL 1.x, riscos-mesa (software, NEON fast paths); `CC_GL_FASTEST_HINTS`: GL_FASTEST perspective and fog hints (its fast route) |
 | Cave culling | `CaveCull.c`, `Builder.c` (links per chunk), `MapRenderer.c` (flood from the camera): `CC_BUILD_CAVECULL` |
-| Render size | `Window_SDL2.c`: `ClassiCube$RenderSize` (default 640x360, `full` = off) and `ClassiCube$Overlay` become `SDL_RISCOS_GL_RENDER_SIZE` / `SDL_RISCOS_GL_OVERLAY` before the game window opens; `sched_yield()` each frame; default view distance 128 |
+| Render size | `Window_SDL2.c`: `ClassiCube$RenderSize` (default 640x360, `full` = off) and `ClassiCube$Overlay` become `SDL_RISCOS_GL_RENDER_SIZE` / `SDL_RISCOS_GL_OVERLAY` before the game window opens; `sched_yield()` each frame; default view distance 128. Window (`Window_RISCOS_DefaultSize`, when no size is saved): the largest of 3x/2x/1.5x/1x the render size that fits on the desktop less 40x140 (title bar, icon bar), e.g. 1280x720 on 1920x1080, so EGL scales the picture up; `ClassiCube$WindowSize` overrides; `full` keeps 854x480 |
 | Sound | `Audio_OpenAL.c`: the devkit's OpenAL Soft, through SDL (SharedSoundBuffer or DigitalRenderer) |
 | Music | `Vorbis.c` `CC_BUILD_NEON`: NEON versions of the decoder's hot loops (inverse coupling, IMDCT steps 1, 3 and 4, overlap and 16-bit output), only those functions compiled for NEON (`#pragma GCC target`), used when `VFPSupport_Features` says the CPU has Advanced SIMD (`ClassiCube$NoNEON` turns them off); plus tables of codebook vectors and residue class digits, made once per stream, for every CPU |
 | TLS | `SSL.c` `CC_SSL_BACKEND_ACORNSSL`: the AcornSSL module (`AcornSSL_CreateSession` on the connected socket, SNI, non-blocking with sleeps) |
@@ -52,6 +52,9 @@ against the riscos-mesa devkit (20.3.5-17 or later), then `elf2aif -e`
     inverse coupling NEON = C for ±0, extremes and infinities (NEON
     flushes denormals and gives the default NaN; a valid stream has
     neither in the coupling input).
+  - test_winsize: the default window size from the desktop, render size
+    and `ClassiCube$WindowSize` (whole-number and 1.5x scales, exact fits,
+    `full`, bad sizes).
   All catch deliberate mutants. The NEON loads and stores are on float
   and 16-bit arrays without alignment qualifiers (element alignment only),
   which test_vorbis confirms with alignment traps on.

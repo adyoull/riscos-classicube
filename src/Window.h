@@ -225,6 +225,10 @@ void Window_UpdateRawMouse(void);
 /* Disables listening for raw input and stops raising PointerEvents.RawMoved */
 /* Cursor will also be unhidden and moved back to window centre. */
 void Window_DisableRawMouse(void);
+#ifdef CC_BUILD_RISCOS
+/* Size of the game window when none was saved (larger than the render size) */
+void Window_RISCOS_DefaultSize(int* width, int* height);
+#endif
 
 /* OpenGL contexts are heavily tied to the window, so for simplicitly are also provided here */
 #if CC_GFX_BACKEND_IS_GL()

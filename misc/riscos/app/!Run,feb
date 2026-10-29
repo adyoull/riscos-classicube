@@ -30,6 +30,8 @@ RMEnsure SharedSoundBuffer 0.07 RMEnsure DigitalRenderer 0.51 IfThere System:Mod
 | the display does that, for nothing). Set these before running to change:
 |   ClassiCube$RenderSize  WxH (fewer pixels = faster), or full
 |   ClassiCube$Overlay     0 to stretch without the overlay
+|   ClassiCube$WindowSize  WxH (default: 3x, 2x or 1.5x the render size,
+|                          the biggest that fits on the desktop)
 If "<ClassiCube$RenderSize>" = "" Then Set ClassiCube$RenderSize 640x360
 RMEnsure VideoOverlay 0.00 IfThere System:Modules.VideoOverlay Then RMLoad System:Modules.VideoOverlay
 |

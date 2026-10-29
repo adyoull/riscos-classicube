@@ -36,6 +36,11 @@ it, set before running (or edit !Run):
   ClassiCube$RenderSize   e.g. 480x270 (faster) or 854x480 (sharper),
                           or full (the window's own size: slowest)
   ClassiCube$Overlay      0 to stretch without the overlay
+  ClassiCube$WindowSize   the window's size, e.g. 1600x900
+The window opens at 3x, 2x or 1.5x the drawing size, the biggest that
+fits on the desktop (1280x720 on a 1920x1080 desktop): a bigger window
+costs no speed, as the picture is stretched. Dragging the window's size
+stretches it too. The /client resolution command sets a size to keep.
 In the game's options: a shorter view distance (default 128 here) helps
 on big server maps; smooth lighting and fancy effects cost speed.
 

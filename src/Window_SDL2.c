@@ -117,14 +117,55 @@ void Window_Create2D(int width, int height) { DoCreateWindow(width, height, 0); 
 /*  VideoOverlay module the display does it, for nothing). */
 /*  ClassiCube$RenderSize: WxH (default 640x360), or "full" for the window's */
 /*  own size. ClassiCube$Overlay 0: stretch without the overlay. */
-static void RISCOS_SetRenderHints(void) {
+static const char* RISCOS_RenderSize(void) {
 	const char* size = getenv("ClassiCube$RenderSize");
+	return size && size[0] ? size : "640x360";
+}
+
+static void RISCOS_SetRenderHints(void) {
+	const char* size = RISCOS_RenderSize();
 	const char* ovl  = getenv("ClassiCube$Overlay");
 
-	if (!size || !size[0]) size = "640x360";
 	if (SDL_strcasecmp(size, "full") == 0) return;
 	SDL_SetHint("SDL_RISCOS_GL_RENDER_SIZE", size);
 	SDL_SetHint("SDL_RISCOS_GL_OVERLAY", ovl && ovl[0] == '0' ? "0" : "1");
+}
+
+static cc_bool RISCOS_ParseSize(const char* str, int* w, int* h) {
+	char* end;
+	long x, y;
+	if (!str) return false;
+	x = strtol(str, &end, 10);
+	if (end == str || (*end != 'x' && *end != 'X')) return false;
+	str = end + 1;
+	y = strtol(str, &end, 10);
+	if (end == str || *end) return false;
+	if (x < 64 || y < 64 || x > 8192 || y > 8192) return false;
+	*w = (int)x; *h = (int)y;
+	return true;
+}
+
+/* The game window's size when none has been saved (/client resolution). */
+/*  The game draws at the render size and EGL stretches that to the window */
+/*  (or the overlay does), so the window can be big for nothing: the largest */
+/*  of 3x, 2x, 1.5x and 1x the render size that fits on the desktop with */
+/*  room for the title bar and icon bar (640x360 on 1920x1080: 1280x720). */
+/*  ClassiCube$WindowSize WxH overrides it. Drawing at full size ("full" */
+/*  render size) keeps upstream's 854x480. */
+void Window_RISCOS_DefaultSize(int* width, int* height) {
+	static const int scales[] = { 6, 4, 3, 2 }; /* in halves */
+	int rw, rh, i, w, h;
+
+	*width = 854; *height = 480;
+	if (RISCOS_ParseSize(getenv("ClassiCube$WindowSize"), width, height)) return;
+	if (!RISCOS_ParseSize(RISCOS_RenderSize(), &rw, &rh)) return;
+
+	for (i = 0; i < 4; i++)
+	{
+		w = rw * scales[i] / 2; h = rh * scales[i] / 2;
+		if (w <= DisplayInfo.Width - 40 && h <= DisplayInfo.Height - 140) break;
+	}
+	*width = w; *height = h;
 }
 #endif
 #if CC_GFX_BACKEND_IS_GL()

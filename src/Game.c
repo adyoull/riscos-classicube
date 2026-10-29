@@ -864,8 +864,12 @@ void Game_Setup(void) {
 
 	/* No custom resolution has been set */
 	if (width == 0 || height == 0) {
+#ifdef CC_BUILD_RISCOS
+		Window_RISCOS_DefaultSize(&width, &height);
+#else
 		width = 854; height = 480;
 		if (DisplayInfo.Width < 854) width = 640;
+#endif
 	}
 	
 	String_InitArray(title, titleBuffer);
