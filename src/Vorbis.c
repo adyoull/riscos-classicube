@@ -260,12 +260,47 @@ struct Codebook {
 	float minValue, deltaValue;
 	cc_uint32 sequenceP, lookupType, lookupValues;
 	cc_uint16* multiplicands;
+	/* each entry's vector of values, worked out once (as stb_vorbis does): */
+	/*  saves two divisions per value for lookup type 1. NULL if too big */
+	float* vectors;
 };
 
 static void Codebook_Free(struct Codebook* c) {
 	Mem_Free(c->codewords);
 	Mem_Free(c->values);
 	Mem_Free(c->multiplicands);
+	Mem_Free(c->vectors);
+}
+
+/* The values Codebook_DecodeVectors would add for each entry, computed the */
+/*  same way (so the same floats) */
+#define CODEBOOK_MAX_VECTORS (64 * 1024)
+static void Codebook_CalcVectors(struct Codebook* c) {
+	cc_uint32 entry, i, offset, indexDivisor;
+	float last, value, *dst;
+
+	c->vectors = NULL;
+	if (!c->entries || c->entries * c->dimensions > CODEBOOK_MAX_VECTORS) return;
+	if (c->entries > CODEBOOK_MAX_VECTORS / c->dimensions) return;
+	c->vectors = (float*)Mem_TryAlloc(c->entries * c->dimensions, sizeof(float));
+	if (!c->vectors) return;
+
+	for (entry = 0, dst = c->vectors; entry < c->entries; entry++)
+	{
+		last = 0.0f; indexDivisor = 1;
+		offset = entry * c->dimensions;
+		for (i = 0; i < c->dimensions; i++, dst++)
+		{
+			if (c->lookupType == 1) {
+				offset = (entry / indexDivisor) % c->lookupValues;
+				indexDivisor *= c->lookupValues;
+			}
+			value = c->multiplicands[offset] * c->deltaValue + c->minValue + last;
+			*dst  = value;
+			if (c->sequenceP) last = value;
+			if (c->lookupType == 2) offset++;
+		}
+	}
 }
 
 static cc_uint32 Codebook_Pow(cc_uint32 base, cc_uint32 exp) {
@@ -368,6 +403,7 @@ static cc_result Codebook_DecodeSetup(struct VorbisState* ctx, struct Codebook* 
 	int valueBits;
 	cc_uint32 lookupValues;
 
+	c->vectors = NULL;
 	sync = Vorbis_ReadBits(ctx, 24);
 	if (sync != CODEBOOK_SYNC) return VORBIS_ERR_CODEBOOK_SYNC;
 	c->dimensions = Vorbis_ReadBits(ctx, 16);
@@ -437,6 +473,7 @@ static cc_result Codebook_DecodeSetup(struct VorbisState* ctx, struct Codebook* 
 	{
 		c->multiplicands[i] = Vorbis_ReadBits(ctx, valueBits);
 	}
+	Codebook_CalcVectors(c);
 	return 0;
 }
 
@@ -468,7 +505,10 @@ static void Codebook_DecodeVectors(struct VorbisState* ctx, struct Codebook* c, 
 	float last = 0.0f, value;
 	cc_uint32 i, offset;
 
-	if (c->lookupType == 1) {		
+	if (c->vectors && lookupOffset < c->entries) {
+		const float* src = c->vectors + lookupOffset * c->dimensions;
+		for (i = 0; i < c->dimensions; i++, v += step) { *v += src[i]; }
+	} else if (c->lookupType == 1) {		
 		cc_uint32 indexDivisor = 1;
 		for (i = 0; i < c->dimensions; i++, v += step) 
 		{
@@ -830,12 +870,41 @@ struct Residue {
 	cc_uint32 begin, end, partitionSize;
 	cc_uint8  cascade[RESIDUE_MAX_CLASSIFICATIONS];
 	cc_int16  books[RESIDUE_MAX_CLASSIFICATIONS][8];
+	/* the classifications each classbook entry stands for (its digits in */
+	/*  base 'classifications'), worked out once; NULL if too big */
+	cc_uint8* classDigits;
 };
+#define RESIDUE_MAX_DIGITS (64 * 1024)
+
+static void Residue_CalcDigits(struct VorbisState* ctx, struct Residue* r) {
+	struct Codebook* book;
+	cc_uint32 entry, temp, cpc;
+	int i;
+
+	r->classDigits = NULL;
+	if (r->classbook >= ctx->numCodebooks) return;
+	book = &ctx->codebooks[r->classbook];
+	cpc  = book->dimensions;
+	if (!book->entries || !cpc || book->entries > RESIDUE_MAX_DIGITS / cpc) return;
+
+	r->classDigits = (cc_uint8*)Mem_TryAlloc(book->entries, cpc);
+	if (!r->classDigits) return;
+	for (entry = 0; entry < book->entries; entry++)
+	{
+		temp = entry;
+		for (i = cpc - 1; i >= 0; i--)
+		{
+			r->classDigits[entry * cpc + i] = temp % r->classifications;
+			temp /= r->classifications;
+		}
+	}
+}
 
 static cc_result Residue_DecodeSetup(struct VorbisState* ctx, struct Residue* r, int type) {
 	cc_int16 codebook;
 	int i, j;
 
+	r->classDigits = NULL;
 	r->type  = (cc_uint8)type;
 	r->begin = Vorbis_ReadBits(ctx, 24);
 	r->end   = Vorbis_ReadBits(ctx, 24);
@@ -862,6 +931,7 @@ static cc_result Residue_DecodeSetup(struct VorbisState* ctx, struct Residue* r,
 			r->books[i][j] = codebook;
 		}
 	}
+	Residue_CalcDigits(ctx, r);
 	return 0;
 }
 
@@ -914,6 +984,11 @@ static void Residue_DecodeCore(struct VorbisState* ctx, struct Residue* r, cc_ui
 					if (doNotDecode[j]) continue;
 
 					temp = Codebook_DecodeScalar(ctx, classbook);
+					if (r->classDigits && temp < classbook->entries) {
+						const cc_uint8* digits = r->classDigits + temp * classwordsPerCodeword;
+						for (i = 0; i < classwordsPerCodeword; i++) classifications[j][i + partitionCount] = digits[i];
+						continue;
+					}
 					for (i = classwordsPerCodeword - 1; i >= 0; i--) 
 					{
 						classifications[j][i + partitionCount] = temp % r->classifications;
@@ -1096,7 +1171,256 @@ void imdct_init(struct imdct_state* state, int n) {
 	{
 		reversed[k] = Vorbis_ReverseBits(k) >> (32-log2_n+3);
 	}
+
+#ifdef CC_BUILD_NEON
+	/* step 3's factors for each level with at least 4 values of r */
+	{
+		int l, r, off = 0;
+		for (l = 0; l <= log2_n - 4; l++)
+		{
+			int k1 = 1 << (l+3), rMax = n >> (l+4);
+			if (rMax < 4) break;
+			for (r = 0; r < rMax; r++)
+			{
+				state->a3[off + r]        = A[r*k1];
+				state->a3[off + rMax + r] = A[r*k1+1];
+			}
+			off += rMax * 2;
+		}
+	}
+#endif
 }
+
+#ifdef CC_BUILD_NEON
+/*########################################################################################################################*
+*-------------------------------------------------------NEON versions-----------------------------------------------------*
+*#########################################################################################################################*/
+/* ARM Advanced SIMD (NEON) versions of the decoder's hot loops: inverse */
+/*  coupling, steps 1, 3 and 4 of the IMDCT, and the overlap and output of */
+/*  each frame. Used only when the CPU */
+/*  has NEON; GCC compiles just these functions for NEON (#pragma target), so */
+/*  the rest still runs on ARMv7 machines with only VFP. Same results as the C */
+/*  code (NEON's multiply-accumulate rounds the product, as VFP's does), except */
+/*  that NEON flushes denormal numbers (below about 1e-38) to zero. */
+/*  RISC OS: ClassiCube$NoNEON turns them off. */
+#include <stdlib.h>
+#if defined CC_BUILD_RISCOS
+#include <kernel.h>
+#define XVFPSupport_Features 0x78EC8
+#elif defined __linux__
+#include <sys/auxv.h>
+#endif
+static int vorbis_neon = -1;
+
+static cc_bool Vorbis_HasNEON(void) {
+	if (vorbis_neon >= 0) return vorbis_neon;
+	vorbis_neon = 0;
+#if defined CC_BUILD_RISCOS
+	{
+		_kernel_swi_regs r;
+		r.r[0] = 0;
+		/* MVFR1: Advanced SIMD load/store, integer and single precision */
+		if (!getenv("ClassiCube$NoNEON") && !_kernel_swi(XVFPSupport_Features, &r, &r)
+				&& (r.r[2] & 0xFFF00) == 0x11100) vorbis_neon = 1;
+	}
+#elif defined __linux__
+	if (!getenv("CC_NO_NEON") && (getauxval(AT_HWCAP) & (1 << 12))) vorbis_neon = 1; /* HWCAP_NEON */
+#endif
+	return vorbis_neon;
+}
+
+#pragma GCC push_options
+#pragma GCC target("fpu=neon")
+#include <arm_neon.h>
+
+/* Without -ffast-math GCC turns float compares and negation written with */
+/*  NEON intrinsics into scalar code (NEON isn't strictly IEEE), so these */
+/*  are done on the bits: negating flips the sign bit, and a float is > 0 */
+/*  exactly when its bits as an int are > 0 and <= 0x7F800000 (+infinity: */
+/*  so not +-0, nothing negative and not NaN) */
+static CC_INLINE float32x4_t Vorbis_Neg4(float32x4_t v) {
+	return vreinterpretq_f32_u32(veorq_u32(vreinterpretq_u32_f32(v), vdupq_n_u32(0x80000000)));
+}
+static CC_INLINE uint32x4_t Vorbis_AboveZero4(float32x4_t v) {
+	int32x4_t b = vreinterpretq_s32_f32(v);
+	return vandq_u32(vcgtq_s32(b, vdupq_n_s32(0)), vcleq_s32(b, vdupq_n_s32(0x7F800000)));
+}
+
+/* clamp to -1..1, scale and truncate to 16 bits, as the C code does */
+static CC_INLINE int16x4_t Vorbis_ToPCM(float32x4_t v) {
+	v = vminq_f32(vmaxq_f32(v, vdupq_n_f32(-1.0f)), vdupq_n_f32(1.0f));
+	return vmovn_s32(vcvtq_s32_f32(vmulq_n_f32(v, 32767.0f)));
+}
+
+/* data[2i], data[2i+1] = left and right of a[i] (or, with wa/wb, of */
+/*  a[i] * wa[i] + b[i] * wb[i]); count is a multiple of 4 */
+static void Vorbis_OutStereoNEON(cc_int16* data, const float* aL, const float* aR,
+								const float* bL, const float* bR, const float* wa, const float* wb, int count) {
+	int i;
+	for (i = 0; i < count; i += 4, data += 8)
+	{
+		int16x4x2_t out;
+		float32x4_t l = vld1q_f32(aL + i), r = vld1q_f32(aR + i);
+		if (wa) {
+			float32x4_t pw = vld1q_f32(wa + i), cw = vld1q_f32(wb + i);
+			l = vmlaq_f32(vmulq_f32(l, pw), vld1q_f32(bL + i), cw);
+			r = vmlaq_f32(vmulq_f32(r, pw), vld1q_f32(bR + i), cw);
+		}
+		out.val[0] = Vorbis_ToPCM(l); out.val[1] = Vorbis_ToPCM(r);
+		vst2_s16(data, out);
+	}
+}
+
+static void Vorbis_OutMonoNEON(cc_int16* data, const float* a, const float* b,
+								const float* wa, const float* wb, int count) {
+	int i;
+	for (i = 0; i < count; i += 4, data += 4)
+	{
+		float32x4_t v = vld1q_f32(a + i);
+		if (wa) v = vmlaq_f32(vmulq_f32(v, vld1q_f32(wa + i)), vld1q_f32(b + i), vld1q_f32(wb + i));
+		vst1_s16(data, Vorbis_ToPCM(v));
+	}
+}
+
+/* lanes 0..3 of v in the order 3..0 */
+static CC_INLINE float32x4_t Vorbis_Reverse4(float32x4_t v) {
+	v = vrev64q_f32(v);
+	return vcombine_f32(vget_high_f32(v), vget_low_f32(v));
+}
+
+/* One level of IMDCT step 3 (see imdct_calc), four values of r at a time: */
+/*  the pairs e (and f) for r..r+3 lie in 8 floats going down from the top, */
+/*  so vld2 splits them into e_2s and e_1s with r+3 in lane 0 */
+static void imdct_step3NEON(const float* w, float* u, const float* t0, const float* t1,
+							int n2, int k0, int rMax, int s2Max) {
+	int r, s2;
+	for (s2 = 0; s2 < s2Max; s2 += 2)
+	{
+		int e = n2 - 1 - k0 * s2, f = n2 - 1 - k0 * (s2 + 1);
+		for (r = 0; r < rMax; r += 4)
+		{
+			float32x4x2_t ev = vld2q_f32(w + e - 2 * r - 7); /* [0] = e_2s, [1] = e_1s */
+			float32x4x2_t fv = vld2q_f32(w + f - 2 * r - 7);
+			float32x4_t a0 = Vorbis_Reverse4(vld1q_f32(t0 + r));
+			float32x4_t a1 = Vorbis_Reverse4(vld1q_f32(t1 + r));
+			float32x4_t d1 = vsubq_f32(ev.val[1], fv.val[1]); /* e_1 - f_1 */
+			float32x4_t d2 = vsubq_f32(ev.val[0], fv.val[0]); /* e_2 - f_2 */
+			float32x4x2_t ue, uf;
+
+			ue.val[1] = vaddq_f32(ev.val[1], fv.val[1]);
+			ue.val[0] = vaddq_f32(ev.val[0], fv.val[0]);
+			uf.val[1] = vmlsq_f32(vmulq_f32(d1, a0), d2, a1);
+			uf.val[0] = vmlaq_f32(vmulq_f32(d2, a0), d1, a1);
+			vst2q_f32(u + e - 2 * r - 7, ue);
+			vst2q_f32(u + f - 2 * r - 7, uf);
+		}
+	}
+}
+/* IMDCT steps 1 and 2 (see imdct_calc) for k..k+3: the values read going */
+/*  down (in[n2-4-k4], A[n2-1-k2]...) come out with k+3 in lane 0 and are */
+/*  turned round; each expression keeps the C code's order of operations */
+static void imdct_step1NEON(const float* in, const float* A, float* w, int n2, int n4, int n8) {
+	int k, k2, k4;
+	for (k = 0, k2 = 0, k4 = 0; k < n8; k += 4, k2 += 8, k4 += 16)
+	{
+		float32x4x4_t E = vld4q_f32(in + k4);             /* [1] = in[k4+1], [3] = in[k4+3] */
+		float32x4x4_t F = vld4q_f32(in + n2 - 16 - k4);   /* [0] = in[n2-4-k4], [2] = in[n2-2-k4], reversed */
+		float32x4x2_t P = vld2q_f32(A + n2 - 8 - k2);     /* [0] = A[n2-2-k2], [1] = A[n2-1-k2], reversed */
+		float32x4x2_t Q = vld2q_f32(A + n4 - 8 - k2);     /* [0] = A[n4-2-k2], [1] = A[n4-1-k2], reversed */
+		float32x4x4_t R = vld4q_f32(A + n2 - 16 - k4);    /* [0] = A[n2-4-k4], [1] = A[n2-3-k4], reversed */
+		float32x4_t e_1 = Vorbis_Neg4(E.val[3]), e_2 = Vorbis_Neg4(E.val[1]);
+		float32x4_t f_1 = Vorbis_Reverse4(F.val[0]), f_2 = Vorbis_Reverse4(F.val[2]);
+		float32x4_t a1 = Vorbis_Reverse4(P.val[1]), a2 = Vorbis_Reverse4(P.val[0]);
+		float32x4_t b1 = Vorbis_Reverse4(Q.val[1]), b2 = Vorbis_Reverse4(Q.val[0]);
+		float32x4_t c0 = Vorbis_Reverse4(R.val[0]), c1 = Vorbis_Reverse4(R.val[1]);
+		float32x4_t g_1, g_2, h_1, h_2, d1, d2;
+		float32x4x2_t hi, lo;
+
+		g_1 = vmlaq_f32(vmulq_f32(e_1, a1), e_2, a2);  /* e_1 * A[n2-1-k2] + e_2 * A[n2-2-k2] */
+		g_2 = vmlsq_f32(vmulq_f32(e_1, a2), e_2, a1);  /* e_1 * A[n2-2-k2] - e_2 * A[n2-1-k2] */
+		h_2 = vmlsq_f32(vmulq_f32(f_1, b2), f_2, b1);  /* f_1 * A[n4-2-k2] - f_2 * A[n4-1-k2] */
+		h_1 = vmlaq_f32(vmulq_f32(f_1, b1), f_2, b2);  /* f_1 * A[n4-1-k2] + f_2 * A[n4-2-k2] */
+
+		hi.val[0] = vaddq_f32(h_1, g_1); hi.val[1] = vaddq_f32(h_2, g_2);
+		vst2q_f32(w + n4 + k2, hi);
+
+		d2 = vsubq_f32(h_2, g_2); d1 = vsubq_f32(h_1, g_1);
+		lo.val[1] = vmlsq_f32(vmulq_f32(d2, c0), d1, c1); /* (h_2-g_2)*A[n2-4-k4] - (h_1-g_1)*A[n2-3-k4] */
+		lo.val[0] = vmlaq_f32(vmulq_f32(d1, c0), d2, c1); /* (h_1-g_1)*A[n2-4-k4] + (h_2-g_2)*A[n2-3-k4] */
+		vst2q_f32(w + k2, lo);
+	}
+}
+
+/* IMDCT steps 4 to 8 and the output (see imdct_calc) for k..k+3: u is read */
+/*  through the bit reversal table one value at a time, the rest is NEON */
+static void imdct_step4NEON(const float* u, const float* B, const float* C, const cc_uint32* reversed,
+							float* out, int n, int n2, int n4, int n8) {
+	int k, k2, i, n3_4 = n - n4;
+	float32x4_t half = vdupq_n_f32(-0.5f);
+	for (k = 0, k2 = 0; k < n8; k += 4, k2 += 8)
+	{
+		float e1[4], e2[4], f1[4], f2[4];
+		float32x4_t e_1, e_2, f_1, f_2, X, Y, X2, Y2, s1, d1, d2, s2;
+		float32x4_t g_1, g_2, h_1, h_2, x_1, x_2, y_1, y_2;
+		float32x4x2_t Cv, Bv, Bd;
+
+		for (i = 0; i < 4; i++)
+		{
+			cc_uint32 j4 = reversed[k + i] << 2;
+			e1[i] = u[n2-j4-1]; e2[i] = u[n2-j4-2];
+			f1[i] = u[j4+1];    f2[i] = u[j4+0];
+		}
+		e_1 = vld1q_f32(e1); e_2 = vld1q_f32(e2); f_1 = vld1q_f32(f1); f_2 = vld1q_f32(f2);
+		Cv  = vld2q_f32(C + k2);  /* [0] = C[k2], [1] = C[k2+1] */
+		Bv  = vld2q_f32(B + k2);  /* [0] = B[k2], [1] = B[k2+1] */
+		Bd  = vld2q_f32(B + n2 - 8 - k2); /* [0] = B[n2-2-k2], [1] = B[n2-1-k2], reversed */
+		Bd.val[0] = Vorbis_Reverse4(Bd.val[0]); Bd.val[1] = Vorbis_Reverse4(Bd.val[1]);
+
+		s1 = vaddq_f32(e_1, f_1); d1 = vsubq_f32(e_1, f_1);
+		s2 = vaddq_f32(e_2, f_2); d2 = vsubq_f32(e_2, f_2);
+		X  = vmulq_f32(Cv.val[1], d1); Y  = vmulq_f32(Cv.val[0], s2);
+		X2 = vmulq_f32(Cv.val[1], s2); Y2 = vmulq_f32(Cv.val[0], d1);
+
+		g_1 = vaddq_f32(vaddq_f32(s1, X), Y);                     /*  e_1 + f_1 + C1*(e_1-f_1) + C0*(e_2+f_2) */
+		h_1 = vsubq_f32(vsubq_f32(s1, X), Y);                     /*  e_1 + f_1 - ... - ... */
+		g_2 = vsubq_f32(vaddq_f32(d2, X2), Y2);                   /*  e_2 - f_2 + C1*(e_2+f_2) - C0*(e_1-f_1) */
+		h_2 = vsubq_f32(vaddq_f32(vsubq_f32(f_2, e_2), X2), Y2);  /* -e_2 + f_2 + ... - ... */
+
+		x_1 = vmulq_f32(half, vmlaq_f32(vmulq_f32(g_1, Bv.val[0]), g_2, Bv.val[1]));
+		x_2 = vmulq_f32(half, vmlsq_f32(vmulq_f32(g_1, Bv.val[1]), g_2, Bv.val[0]));
+		vst1q_f32(out + n4 - 4 - k,   Vorbis_Reverse4(Vorbis_Neg4(x_2))); /* out[n4-1-k]   = -x_2 */
+		vst1q_f32(out + n4 + k,       x_2);                              /* out[n4+k]     =  x_2 */
+		vst1q_f32(out + n3_4 - 4 - k, Vorbis_Reverse4(x_1));             /* out[n3_4-1-k] =  x_1 */
+		vst1q_f32(out + n3_4 + k,     x_1);                              /* out[n3_4+k]   =  x_1 */
+
+		y_1 = vmulq_f32(half, vmlaq_f32(vmulq_f32(h_1, Bd.val[0]), h_2, Bd.val[1]));
+		y_2 = vmulq_f32(half, vmlsq_f32(vmulq_f32(h_1, Bd.val[1]), h_2, Bd.val[0]));
+		vst1q_f32(out + k,          Vorbis_Neg4(y_2));                   /* out[k]      = -y_2 */
+		vst1q_f32(out + n2 - 4 - k, Vorbis_Reverse4(y_2));               /* out[n2-1-k] =  y_2 */
+		vst1q_f32(out + n2 + k,     y_1);                                /* out[n2+k]   =  y_1 */
+		vst1q_f32(out + n - 4 - k,  Vorbis_Reverse4(y_1));               /* out[n-1-k]  =  y_1 */
+	}
+}
+/* Inverse coupling (see Vorbis_DecodeFrame) four samples at a time: both */
+/*  sums worked out, the C code's choice made per lane with masks */
+static void Vorbis_UncoupleNEON(float* mag, float* ang, int count) {
+	int j;
+	for (j = 0; j < count; j += 4)
+	{
+		float32x4_t m = vld1q_f32(mag + j), a = vld1q_f32(ang + j);
+		uint32x4_t mPos = Vorbis_AboveZero4(m), aPos = Vorbis_AboveZero4(a);
+		float32x4_t sum = vaddq_f32(m, a), dif = vsubq_f32(m, a);
+
+		/* a > 0: ang = m > 0 ? m - a : m + a, mag unchanged */
+		/* else:  ang = m,  mag = m > 0 ? m + a : m - a */
+		float32x4_t aNew = vbslq_f32(aPos, vbslq_f32(mPos, dif, sum), m);
+		float32x4_t mNew = vbslq_f32(aPos, m, vbslq_f32(mPos, sum, dif));
+		vst1q_f32(ang + j, aNew);
+		vst1q_f32(mag + j, mNew);
+	}
+}
+#pragma GCC pop_options
+#endif
 
 void imdct_calc(float* in, float* out, struct imdct_state* state) {
 	int k, k2, k4, n = state->n;
@@ -1116,6 +1440,9 @@ void imdct_calc(float* in, float* out, struct imdct_state* state) {
 
 
 	/* spectral coefficients, step 1, step 2 */ /* TODO avoid k */
+#ifdef CC_BUILD_NEON
+	if (Vorbis_HasNEON()) imdct_step1NEON(in, A, w, n2, n4, n8); else
+#endif
 	for (k = 0, k2 = 0, k4 = 0; k < n8; k++, k2 += 2, k4 += 4) 
 	{
 		e_1 = -in[k4+3];   e_2 = -in[k4+1];
@@ -1135,11 +1462,20 @@ void imdct_calc(float* in, float* out, struct imdct_state* state) {
 
 	/* step 3 */
 	log2_n = state->log2_n;
+#ifdef CC_BUILD_NEON
+	{ int a3off = 0; cc_bool neon = Vorbis_HasNEON();
+#endif
 	for (l = 0; l <= log2_n - 4; l++) 
 	{
 		int k0 = n >> (l+3), k1 = 1 << (l+3);
 		int r, r2, rMax = n >> (l+4), s2, s2Max = 1 << (l+2);
 
+#ifdef CC_BUILD_NEON
+		if (neon && rMax >= 4) {
+			imdct_step3NEON(w, u, state->a3 + a3off, state->a3 + a3off + rMax, n2, k0, rMax, s2Max);
+			a3off += rMax * 2;
+		} else
+#endif
 		for (r = 0, r2 = 0; r < rMax; r++, r2 += 2) 
 		{
 			for (s2 = 0; s2 < s2Max; s2 += 2) 
@@ -1162,9 +1498,15 @@ void imdct_calc(float* in, float* out, struct imdct_state* state) {
 			Mem_Copy(w, u, n2 * sizeof(float));
 		}
 	}
+#ifdef CC_BUILD_NEON
+	}
+#endif
 
 	/* step 4, step 5, step 6, step 7, step 8, output */
 	reversed = state->reversed;
+#ifdef CC_BUILD_NEON
+	if (Vorbis_HasNEON()) { imdct_step4NEON(u, B, C, reversed, out, n, n2, n4, n8); return; }
+#endif
 	for (k = 0, k2 = 0; k < n8; k++, k2 += 2) 
 	{
 		cc_uint32 j = reversed[k], j4 = j << 2;
@@ -1241,6 +1583,11 @@ void Vorbis_Free(struct VorbisState* ctx) {
 	{
 		Codebook_Free(&ctx->codebooks[i]);
 	}
+	for (i = 0; i < ctx->numResidues; i++)
+	{
+		Mem_Free(ctx->residues[i].classDigits);
+	}
+	ctx->numResidues = 0;
 
 	Mem_Free(ctx->codebooks);
 	Mem_Free(ctx->floors);
@@ -1366,6 +1713,7 @@ static cc_result Vorbis_DecodeSetup(struct VorbisState* ctx) {
 		if (residue > 2) return VORBIS_ERR_FLOOR_TYPE;
 
 		res = Residue_DecodeSetup(ctx, &ctx->residues[i], residue);
+		ctx->numResidues = i + 1; /* (its table is freed even if it failed) */
 		if (res) return res;
 	}
 
@@ -1538,6 +1886,10 @@ cc_result Vorbis_DecodeFrame(struct VorbisState* ctx) {
 		magValues = ctx->curOutput[mapping->magnitude[i]];
 		angValues = ctx->curOutput[mapping->angle[i]];
 
+#ifdef CC_BUILD_NEON
+		/* (dataSize is half a block: a multiple of 4) */
+		if (Vorbis_HasNEON()) { Vorbis_UncoupleNEON(magValues, angValues, ctx->dataSize); continue; }
+#endif
 		for (j = 0; j < ctx->dataSize; j++) 
 		{
 			m = magValues[j]; a = angValues[j];
@@ -1595,7 +1947,7 @@ int Vorbis_OutputFrame(struct VorbisState* ctx, cc_int16* data) {
 	int curQrtr, prevQrtr, overlapQtr;
 	int curOffset, prevOffset, overlapSize;
 	float sample;
-	int i, ch;
+	int i, ch, done = 0; /* samples already output by NEON code */
 
 	/* first frame decoded has no data */
 	if (ctx->prevBlockSize == 0) {
@@ -1628,7 +1980,17 @@ int Vorbis_OutputFrame(struct VorbisState* ctx, cc_int16* data) {
 	}
 
 	/* for long prev and short cur block, there will be non-overlapped data before */
-	for (i = 0; i < prevOffset; i++) 
+#ifdef CC_BUILD_NEON
+	/* (block sizes are powers of 2 of at least 64: offsets and overlaps are */
+	/*  multiples of 4) */
+	if (Vorbis_HasNEON() && ctx->channels <= 2) {
+		if (ctx->channels == 2) Vorbis_OutStereoNEON(data, prev[0], prev[1], NULL, NULL, NULL, NULL, prevOffset);
+		else                    Vorbis_OutMonoNEON(data, prev[0], NULL, NULL, NULL, prevOffset);
+		data += prevOffset * ctx->channels;
+		done  = prevOffset;
+	}
+#endif
+	for (i = done; i < prevOffset; i++) 
 	{
 		for (ch = 0; ch < ctx->channels; ch++) 
 		{
@@ -1649,6 +2011,14 @@ int Vorbis_OutputFrame(struct VorbisState* ctx, cc_int16* data) {
 
 	/* overlap and add data */
 	/* also perform windowing here */
+#ifdef CC_BUILD_NEON
+	if (Vorbis_HasNEON() && ctx->channels <= 2) {
+		if (ctx->channels == 2) Vorbis_OutStereoNEON(data, prev[0], prev[1], cur[0], cur[1], window.Prev, window.Cur, overlapSize);
+		else                    Vorbis_OutMonoNEON(data, prev[0], cur[0], window.Prev, window.Cur, overlapSize);
+		data += overlapSize * ctx->channels;
+		i = overlapSize;
+	} else
+#endif
 	for (i = 0; i < overlapSize; i++) 
 	{
 		for (ch = 0; ch < ctx->channels; ch++) 
@@ -1661,7 +2031,16 @@ int Vorbis_OutputFrame(struct VorbisState* ctx, cc_int16* data) {
 
 	/* for long cur and short prev block, there will be non-overlapped data after */
 	for (i = 0; i < ctx->channels; i++) { cur[i] += overlapSize; }
-	for (i = 0; i < curOffset; i++) 
+	done = 0;
+#ifdef CC_BUILD_NEON
+	if (Vorbis_HasNEON() && ctx->channels <= 2) {
+		if (ctx->channels == 2) Vorbis_OutStereoNEON(data, cur[0], cur[1], NULL, NULL, NULL, NULL, curOffset);
+		else                    Vorbis_OutMonoNEON(data, cur[0], NULL, NULL, NULL, curOffset);
+		data += curOffset * ctx->channels;
+		done  = curOffset;
+	}
+#endif
+	for (i = done; i < curOffset; i++) 
 	{
 		for (ch = 0; ch < ctx->channels; ch++) 
 		{

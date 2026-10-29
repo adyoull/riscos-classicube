@@ -13,6 +13,7 @@ against the riscos-mesa devkit (20.3.5-17 or later), then `elf2aif -e`
 | Cave culling | `CaveCull.c`, `Builder.c` (links per chunk), `MapRenderer.c` (flood from the camera): `CC_BUILD_CAVECULL` |
 | Render size | `Window_SDL2.c`: `ClassiCube$RenderSize` (default 640x360, `full` = off) and `ClassiCube$Overlay` become `SDL_RISCOS_GL_RENDER_SIZE` / `SDL_RISCOS_GL_OVERLAY` before the game window opens; `sched_yield()` each frame; default view distance 128 |
 | Sound | `Audio_OpenAL.c`: the devkit's OpenAL Soft, through SDL (SharedSoundBuffer or DigitalRenderer) |
+| Music | `Vorbis.c` `CC_BUILD_NEON`: NEON versions of the decoder's hot loops (inverse coupling, IMDCT steps 1, 3 and 4, overlap and 16-bit output), only those functions compiled for NEON (`#pragma GCC target`), used when `VFPSupport_Features` says the CPU has Advanced SIMD (`ClassiCube$NoNEON` turns them off); plus tables of codebook vectors and residue class digits, made once per stream, for every CPU |
 | TLS | `SSL.c` `CC_SSL_BACKEND_ACORNSSL`: the AcornSSL module (`AcornSSL_CreateSession` on the connected socket, SNI, non-blocking with sleeps) |
 | Sockets | `Platform_Posix.c` `Socket_Poll`: the Internet module says a still-connecting socket is writable, so on RISC OS it also checks `getpeername` / `SO_ERROR` (otherwise the first send fails with ENOTCONN, error 57) |
 | HTTP | `Http_Worker.c`: non-blocking sockets with sleeps between tries, because a blocking SWI stops every thread in the task |
@@ -43,7 +44,17 @@ against the riscos-mesa devkit (20.3.5-17 or later), then `elf2aif -e`
   - test_rawmouse: the mouse look code in Window_SDL2.c (RISC OS branch)
     against fake SWIs: movement in pixels, back to the window's middle, a
     moved window, full screen, a window that's gone.
-  All catch deliberate mutants.
+  - test_vorbis: Vorbis.c with the RISC OS branch on: NEON only when
+    VFPSupport_Features reports it (not with the SWI missing, partial
+    SIMD or `ClassiCube$NoNEON`); three streams in `tests/data` (stereo
+    44.1 kHz with coupling, mono 22.05 kHz, stereo 48 kHz high bitrate)
+    decode with and without NEON to upstream's samples bit for bit (CRC32);
+    inverse coupling NEON = C for ±0, extremes and infinities (NEON
+    flushes denormals and gives the default NaN; a valid stream has
+    neither in the coupling input).
+  All catch deliberate mutants. The NEON loads and stores are on float
+  and 16-bit arrays without alignment qualifiers (element alignment only),
+  which test_vorbis confirms with alignment traps on.
 - The portable code as ARM Linux (terminal window, software renderer) under
   qemu-arm-aligntrap -cpu cortex-a8: a singleplayer world generates and
   renders with no alignment trap.
@@ -90,6 +101,27 @@ Findings (instructions per frame at 640x360, view distance 128):
   past the edge); instructions per frame -8 to -9% at ground level, about
   the same elsewhere (on this small map almost everything in view really
   is visible). Off when the camera is inside a solid block (noclip).
+
+## Music decoding speed (container)
+
+`misc/riscos/bench/bench_vorbis.c` decodes a whole .ogg to PCM, built for
+ARM Linux (with and without `-DCC_BUILD_NEON`, the build line is in its
+header) and counted with `insnprof.c` under qemu-arm -cpu cortex-a8.
+Instructions per second of 44.1 kHz stereo music (oggenc -q 3), all
+builds giving the same samples:
+
+| Build | Instructions per second of audio |
+|---|---|
+| upstream | 24.5M |
+| codebook vector and class digit tables | 20.0M (-18%) |
+| plus NEON | 13.7M (-44%) |
+
+What's left is mostly reading the bitstream (`Vorbis_ReadBit`,
+`Codebook_DecodeScalar`, about a third) and floor synthesis, which are
+serial. In a game frame, ClassiCube's own code is under 2% of the
+instructions (the rest is Mesa's rasteriser), so there's nothing more on
+the game side for NEON to speed up; OpenAL Soft in the devkit mixes in
+plain C (handoff to riscos-mesa).
 
 ## Not done yet
 

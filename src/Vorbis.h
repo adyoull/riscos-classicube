@@ -31,6 +31,10 @@ struct imdct_state {
 	float b[VORBIS_MAX_BLOCK_SIZE / 2];
 	float c[VORBIS_MAX_BLOCK_SIZE / 4];
 	cc_uint32 reversed[VORBIS_MAX_BLOCK_SIZE / 8];
+#ifdef CC_BUILD_NEON
+	/* step 3's twiddle factors A[r*k1], A[r*k1+1] in order of r, per level */
+	float a3[VORBIS_MAX_BLOCK_SIZE / 4];
+#endif
 };
 
 struct VorbisWindow { float* Prev; float* Cur; };
@@ -41,6 +45,7 @@ struct VorbisState {
 
 	cc_uint8 channels, modeNumBits;
 	cc_uint16 curBlockSize, prevBlockSize, dataSize, numCodebooks;
+	cc_uint16 numResidues; /* residues set up (each may own a table) */
 	int sampleRate; int blockSizes[2];
 	float* temp; /* temp array reused in places */
 	float* values[2]; /* swapped each frame */

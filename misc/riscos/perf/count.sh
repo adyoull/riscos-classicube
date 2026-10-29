@@ -7,7 +7,7 @@
 # Prints instructions per frame and the top functions (TOP=25).
 set -euo pipefail
 HERE=$(cd "$(dirname "$0")" && pwd)
-out=$1; n=${2:-10}; shift 2 || true; EXTRA=("$@")
+out=$(cd "$1" && pwd); n=${2:-10}; shift 2 || true; EXTRA=("$@")
 : "${QEMU_PLUGINS:?QEMU_PLUGINS=<qemu build dir with qemu-arm>}"
 PLUG=$HERE/out-plugin/libinsnprof.so
 if [ ! -f "$PLUG" ] || [ "$HERE/insnprof.c" -nt "$PLUG" ]; then mkdir -p "$(dirname "$PLUG")"

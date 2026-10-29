@@ -9,11 +9,12 @@ CFLAGS  := -O1 -g -Wall -mfpu=vfpv3 -mfloat-abi=hard -no-pie \
 OUT     := out
 DEVKIT  ?= $(RISCOS_DEVKIT)
 
-check: $(OUT)/test_acornssl $(OUT)/test_socketpoll $(OUT)/test_cavecull $(OUT)/test_rawmouse
+check: $(OUT)/test_acornssl $(OUT)/test_socketpoll $(OUT)/test_cavecull $(OUT)/test_rawmouse $(OUT)/test_vorbis
 	bash $(RCD_DIR)/qemu/aligntrap.sh $(OUT)/test_acornssl
 	bash $(RCD_DIR)/qemu/aligntrap.sh $(OUT)/test_socketpoll
 	bash $(RCD_DIR)/qemu/aligntrap.sh $(OUT)/test_cavecull
 	bash $(RCD_DIR)/qemu/aligntrap.sh $(OUT)/test_rawmouse
+	bash $(RCD_DIR)/qemu/aligntrap.sh $(OUT)/test_vorbis
 
 $(OUT)/test_acornssl: test_acornssl.c ../../../src/SSL.c $(RCD_DIR)/fake/riscos.c
 	@mkdir -p $(OUT)
@@ -43,6 +44,13 @@ $(OUT)/window_sdl2.o: ../../../src/Window_SDL2.c
 
 $(OUT)/test_rawmouse: test_rawmouse.c $(OUT)/window_sdl2.o $(RCD_DIR)/fake/riscos.c
 	$(CC) $(CFLAGS) -o $@ $^ -Wl,--unresolved-symbols=ignore-all
+
+# Vorbis.c (included by the test) with the RISC OS branch on, so with
+# CC_BUILD_NEON; its NEON code is compiled for NEON by its own pragmas
+$(OUT)/test_vorbis: test_vorbis.c ../../../src/Vorbis.c ../../../src/Vorbis.h $(RCD_DIR)/fake/riscos.c
+	@mkdir -p $(OUT)
+	$(CC) $(CFLAGS) -fno-math-errno -o $@ test_vorbis.c ../../../src/Stream.c ../../../src/ExtMath.c \
+	  ../../../src/Utils.c $(RCD_DIR)/fake/riscos.c -lm -Wl,--unresolved-symbols=ignore-all
 
 clean:
 	rm -rf $(OUT)
