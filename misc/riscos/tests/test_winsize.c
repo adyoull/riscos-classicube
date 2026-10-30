@@ -1,18 +1,37 @@
 /* The game window's default size on RISC OS (Window_RISCOS_DefaultSize in
    src/Window_SDL2.c): the real file compiled for ARM Linux with the RISC OS
-   branch on. The game draws at ClassiCube$RenderSize and EGL scales it to
-   the window, so the window is the largest of 3x, 2x, 1.5x, 1x the render
+   branch on, against riscos-crossdev's fake SWIs. The game draws at
+   ClassiCube$RenderSize; with an overlay possible (VideoOverlay loaded,
+   ClassiCube$Overlay not 0, EGL$Overlay not off) the display stretches it
+   for nothing, so the window is the largest of 3x, 2x, 1.5x, 1x the render
    size that fits on the desktop (less 40 x 140 pixels for the title bar and
-   icon bar); ClassiCube$WindowSize overrides; "full" keeps 854x480. */
+   icon bar). Without an overlay, or drawing at full size: 854x480.
+   ClassiCube$WindowSize overrides. */
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
+#include <strings.h>
 #include "Core.h"
 #include "Window.h"
+#include "fake.h"
 
 /* what Window_SDL2.c reaches that these checks don't use */
 char Input[4096], PointerEvents[4096];
+int SDL_strcasecmp(const char* a, const char* b) { return strcasecmp(a, b); }
+int SDL_strcmp(const char* a, const char* b) { return strcmp(a, b); }
+
+/* fake OS_Module 18 (look up module): VideoOverlay loaded or not */
+#define OS_Module 0x1E
+static int haveOverlayModule = 1, lookups;
+static const _kernel_oserror notFound = { 0x102, "Module 'VideoOverlay' not found" };
+static const _kernel_oserror* swi_module(int swi, int r[10]) {
+	lookups++;
+	if (r[0] != 18 || strcmp((const char*)r[1], "VideoOverlay")) return &notFound;
+	return haveOverlayModule ? NULL : &notFound;
+}
 
 static int fails, checks;
+#define CHECK2(c, what) do { checks++; if (!(c)) { fails++; printf("FAIL %s\n", what); } } while (0)
 static void Expect(int dw, int dh, const char* render, const char* window, int ew, int eh) {
 	int w = -1, h = -1;
 	DisplayInfo.Width = dw; DisplayInfo.Height = dh;
@@ -28,6 +47,8 @@ static void Expect(int dw, int dh, const char* render, const char* window, int e
 }
 
 int main(void) {
+	fake_reset();
+	fake_swi(OS_Module, "OS_Module", swi_module);
 	/* default render size 640x360 */
 	Expect(1920, 1080, NULL, NULL, 1280,  720); /* 3x = 1920x1080 doesn't fit */
 	Expect(2560, 1440, NULL, NULL, 1920, 1080); /* 3x */
@@ -56,6 +77,27 @@ int main(void) {
 	Expect(1920, 1080, "full", "1024x576", 1024, 576);
 	Expect(1920, 1080, NULL, "big",      1280, 720);
 	Expect(1920, 1080, NULL, "",         1280, 720);
+	CHECK2(lookups > 0, "VideoOverlay looked up with OS_Module 18");
+
+	/* no overlay possible: the CPU stretches, so upstream's size */
+	haveOverlayModule = 0;
+	Expect(1920, 1080, NULL, NULL, 854, 480);              /* VideoOverlay not loaded */
+	Expect(1920, 1080, NULL, "1600x900", 1600, 900);       /* the override still wins */
+	haveOverlayModule = 1;
+	setenv("ClassiCube$Overlay", "0", 1);
+	Expect(1920, 1080, NULL, NULL, 854, 480);
+	unsetenv("ClassiCube$Overlay");
+	setenv("ClassiCube$Overlay", "1", 1);
+	Expect(1920, 1080, NULL, NULL, 1280, 720);
+	unsetenv("ClassiCube$Overlay");
+	{
+		static const char* offs[] = { "off", "OFF", "no", "0" };
+		static const char* ons[]  = { "on", "yes", "1", "" };
+		int i;
+		for (i = 0; i < 4; i++) { setenv("EGL$Overlay", offs[i], 1); Expect(1920, 1080, NULL, NULL, 854, 480); }
+		for (i = 0; i < 4; i++) { setenv("EGL$Overlay", ons[i], 1);  Expect(1920, 1080, NULL, NULL, 1280, 720); }
+		unsetenv("EGL$Overlay");
+	}
 	printf("test_winsize: %d checks, %d failed\n", checks, fails);
 	return fails != 0;
 }

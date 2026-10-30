@@ -2,16 +2,17 @@
 
 RISC OS 5 on ARMv7 (VFPv3): Raspberry Pi 2 and later, and other Cortex-A
 boards. An Absolute (AIF) program: a static ELF built with GCCSDK's GCC 10 (riscos-crossdev toolchain)
-against the riscos-mesa devkit (20.3.5-17 or later), then `elf2aif -e`
+against the riscos-mesa devkit (20.3.5-18a or later: SDL keyboard focus,
+relative mouse mode, OpenAL NEON mixers), then `elf2aif -e`
 (WimpSlot 20480K in `!Run`).
 
 | Part | How |
 |---|---|
 | Platform | `Platform_Posix.c` on UnixLib; single process (launcher and game in one task); URLs through `URI_Dispatch`; static symbol table instead of `dlopen` (OpenAL); data in `ClassiCube$Data` (default `<Choices$Write>.ClassiCube`); updater off |
-| Window, input | `Window_SDL2.c` on riscos-mesa's SDL2 (RISC OS video driver with GL). That driver reports no keyboard focus (so the window counts as focused: otherwise the pause menu comes straight back) and has no relative mouse mode or pointer warp (so mouse look reads the mouse with OS_Word 21,4 and puts it back in the middle of the game's window with OS_Word 21,3, the window found with Wimp_GetPointerInfo) |
+| Window, input | `Window_SDL2.c` on riscos-mesa's SDL2 (RISC OS video driver with GL), upstream's SDL code: keyboard focus (pauses when the window loses the caret) and mouse look through SDL's relative mouse mode, both in the driver since devkit 20.3.5-18a (test5-7 had their own: an always-focused window, which never let the mouse go, and OS_Word 21 mouse look) |
 | Graphics | `Graphics_GL1.c`: OpenGL 1.x, riscos-mesa (software, NEON fast paths); `CC_GL_FASTEST_HINTS`: GL_FASTEST perspective and fog hints (its fast route) |
 | Cave culling | `CaveCull.c`, `Builder.c` (links per chunk), `MapRenderer.c` (flood from the camera): `CC_BUILD_CAVECULL` |
-| Render size | `Window_SDL2.c`: `ClassiCube$RenderSize` (default 640x360, `full` = off) and `ClassiCube$Overlay` become `SDL_RISCOS_GL_RENDER_SIZE` / `SDL_RISCOS_GL_OVERLAY` before the game window opens; `sched_yield()` each frame; default view distance 128. Window (`Window_RISCOS_DefaultSize`, when no size is saved): the largest of 3x/2x/1.5x/1x the render size that fits on the desktop less 40x140 (title bar, icon bar), e.g. 1280x720 on 1920x1080, so EGL scales the picture up; `ClassiCube$WindowSize` overrides; `full` keeps 854x480 |
+| Render size | `Window_SDL2.c`: `ClassiCube$RenderSize` (default 640x360, `full` = off) and `ClassiCube$Overlay` become `SDL_RISCOS_GL_RENDER_SIZE` / `SDL_RISCOS_GL_OVERLAY` before the game window opens; `sched_yield()` each frame; default view distance 128. Window (`Window_RISCOS_DefaultSize`, when no size is saved): if an overlay is possible (VideoOverlay loaded, `ClassiCube$Overlay` not 0, `EGL$Overlay` not off: RDPServer sets it off), the largest of 3x/2x/1.5x/1x the render size that fits on the desktop less 40x140 (title bar, icon bar), e.g. 1280x720 on 1920x1080, as the display stretches it for nothing; otherwise (the CPU would stretch it, slower for a bigger window) and with `full`, 854x480; `ClassiCube$WindowSize` overrides. The title bar says how EGL shows the picture: [overlay], [overlay hidden] (something overlaps it) or [plotted] (`*Show EGL$OverlayStatus` says why) |
 | Sound | `Audio_OpenAL.c`: the devkit's OpenAL Soft, through SDL (SharedSoundBuffer or DigitalRenderer) |
 | Music | `Vorbis.c` `CC_BUILD_NEON`: NEON versions of the decoder's hot loops (inverse coupling, IMDCT steps 1, 3 and 4, overlap and 16-bit output), only those functions compiled for NEON (`#pragma GCC target`), used when `VFPSupport_Features` says the CPU has Advanced SIMD (`ClassiCube$NoNEON` turns them off); plus tables of codebook vectors and residue class digits, made once per stream, for every CPU |
 | TLS | `SSL.c` `CC_SSL_BACKEND_ACORNSSL`: the AcornSSL module (`AcornSSL_CreateSession` on the connected socket, SNI, non-blocking with sleeps) |
@@ -41,9 +42,6 @@ against the riscos-mesa devkit (20.3.5-17 or later), then `elf2aif -e`
   - test_cavecull: CaveCull_CalcLinks against a plain cell-by-cell flood
     fill (3000 random chunks of 5-95% see-through cells, tunnels, rooms,
     winding paths).
-  - test_rawmouse: the mouse look code in Window_SDL2.c (RISC OS branch)
-    against fake SWIs: movement in pixels, back to the window's middle, a
-    moved window, full screen, a window that's gone.
   - test_vorbis: Vorbis.c with the RISC OS branch on: NEON only when
     VFPSupport_Features reports it (not with the SWI missing, partial
     SIMD or `ClassiCube$NoNEON`); three streams in `tests/data` (stereo
@@ -52,9 +50,10 @@ against the riscos-mesa devkit (20.3.5-17 or later), then `elf2aif -e`
     inverse coupling NEON = C for ±0, extremes and infinities (NEON
     flushes denormals and gives the default NaN; a valid stream has
     neither in the coupling input).
-  - test_winsize: the default window size from the desktop, render size
-    and `ClassiCube$WindowSize` (whole-number and 1.5x scales, exact fits,
-    `full`, bad sizes).
+  - test_winsize: the default window size from the desktop, render size,
+    `ClassiCube$WindowSize` and whether an overlay is possible (fake
+    OS_Module lookup of VideoOverlay, `ClassiCube$Overlay`, `EGL$Overlay`):
+    whole-number and 1.5x scales, exact fits, `full`, bad sizes.
   All catch deliberate mutants. The NEON loads and stores are on float
   and 16-bit arrays without alignment qualifiers (element alignment only),
   which test_vorbis confirms with alignment traps on.

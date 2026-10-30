@@ -37,12 +37,24 @@ it, set before running (or edit !Run):
                           or full (the window's own size: slowest)
   ClassiCube$Overlay      0 to stretch without the overlay
   ClassiCube$WindowSize   the window's size, e.g. 1600x900
-The window opens at 3x, 2x or 1.5x the drawing size, the biggest that
-fits on the desktop (1280x720 on a 1920x1080 desktop): a bigger window
-costs no speed, as the picture is stretched. Dragging the window's size
-stretches it too. The /client resolution command sets a size to keep.
+With the VideoOverlay module (Raspberry Pi), the window opens at 3x, 2x
+or 1.5x the drawing size, the biggest that fits on the desktop (1280x720
+on a 1920x1080 desktop): the display stretches the picture, so a bigger
+window costs no speed. Without an overlay the CPU stretches it, so the
+window stays 854x480. The title bar shows which: [overlay], [plotted],
+or [overlay hidden] while a menu or window is over the game. If it says
+[plotted] on a Pi, *Show EGL$OverlayStatus says why (overlays are off
+while RDPServer has a client connected, and in full screen). The
+/client resolution command sets a size to keep.
 In the game's options: a shorter view distance (default 128 here) helps
 on big server maps; smooth lighting and fancy effects cost speed.
+
+Mouse
+-----
+While you play, the game holds the pointer in its window to turn the
+view. Press Escape for the pause menu to get the pointer back; the game
+also lets go (and pauses) when another window takes the input focus.
+Click "Back to game" to carry on.
 
 Problems
 --------

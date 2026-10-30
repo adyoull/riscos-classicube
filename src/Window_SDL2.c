@@ -99,12 +99,6 @@ static void DoCreateWindow(int width, int height, int flags) {
 	Window_Main.UIScaleY   = DEFAULT_UI_SCALE_Y;
 
 	Window_Main.SoftKeyboardInstant = true;
-#ifdef CC_BUILD_RISCOS
-	/* riscos-mesa's SDL driver doesn't report keyboard focus, so SDL never */
-	/*  sends FOCUS_GAINED: without this the game would keep showing the */
-	/*  pause menu ("Back to game" seeming to do nothing) */
-	Window_Main.Focused = true;
-#endif
 	ApplyIcon();
 	/* TODO grab using SDL_SetWindowGrab? seems to be unnecessary on Linux at least */
 }
@@ -131,6 +125,27 @@ static void RISCOS_SetRenderHints(void) {
 	SDL_SetHint("SDL_RISCOS_GL_OVERLAY", ovl && ovl[0] == '0' ? "0" : "1");
 }
 
+#include <kernel.h>
+#define XOS_Module 0x2001E
+
+/* Whether EGL can show the game through a hardware overlay (a Raspberry */
+/*  Pi with VideoOverlay), which stretches the picture for nothing: not */
+/*  when the module isn't loaded, ClassiCube$Overlay is 0, or EGL$Overlay */
+/*  turns overlays off (RDPServer does while a client is connected). */
+/*  Otherwise the CPU stretches it, at a cost that grows with the window. */
+static cc_bool RISCOS_OverlayPossible(void) {
+	const char* ovl = getenv("ClassiCube$Overlay");
+	const char* egl = getenv("EGL$Overlay");
+	_kernel_swi_regs r;
+
+	if (ovl && ovl[0] == '0') return false;
+	if (egl && (SDL_strcasecmp(egl, "off") == 0 || SDL_strcasecmp(egl, "no") == 0
+			|| SDL_strcmp(egl, "0") == 0)) return false;
+	r.r[0] = 18; /* look up module */
+	r.r[1] = (int)"VideoOverlay";
+	return _kernel_swi(XOS_Module, &r, &r) == NULL;
+}
+
 static cc_bool RISCOS_ParseSize(const char* str, int* w, int* h) {
 	char* end;
 	long x, y;
@@ -146,12 +161,13 @@ static cc_bool RISCOS_ParseSize(const char* str, int* w, int* h) {
 }
 
 /* The game window's size when none has been saved (/client resolution). */
-/*  The game draws at the render size and EGL stretches that to the window */
-/*  (or the overlay does), so the window can be big for nothing: the largest */
+/*  The game draws at the render size; with an overlay the display stretches */
+/*  that to the window for nothing, so the window can be big: the largest */
 /*  of 3x, 2x, 1.5x and 1x the render size that fits on the desktop with */
 /*  room for the title bar and icon bar (640x360 on 1920x1080: 1280x720). */
-/*  ClassiCube$WindowSize WxH overrides it. Drawing at full size ("full" */
-/*  render size) keeps upstream's 854x480. */
+/*  Without an overlay the CPU stretches it (slower for a bigger window), */
+/*  and drawing at full size ("full" render size) costs per pixel: both */
+/*  keep upstream's 854x480. ClassiCube$WindowSize WxH overrides it. */
 void Window_RISCOS_DefaultSize(int* width, int* height) {
 	static const int scales[] = { 6, 4, 3, 2 }; /* in halves */
 	int rw, rh, i, w, h;
@@ -159,6 +175,7 @@ void Window_RISCOS_DefaultSize(int* width, int* height) {
 	*width = 854; *height = 480;
 	if (RISCOS_ParseSize(getenv("ClassiCube$WindowSize"), width, height)) return;
 	if (!RISCOS_ParseSize(RISCOS_RenderSize(), &rw, &rh)) return;
+	if (!RISCOS_OverlayPossible()) return;
 
 	for (i = 0; i < 4; i++)
 	{
@@ -184,9 +201,19 @@ void Window_Destroy(void) {
 	SDL_DestroyWindow(win_handle);
 }
 
+#if defined CC_BUILD_RISCOS && CC_GFX_BACKEND_IS_GL()
+static char ro_title[NATIVE_STR_LEN];
+static int  ro_ovlState = -1;
+static void RISCOS_ShowTitle(void);
+#endif
+
 void Window_SetTitle(const cc_string* title) {
 	char str[NATIVE_STR_LEN];
 	String_EncodeUtf8(str, title);
+#if defined CC_BUILD_RISCOS && CC_GFX_BACKEND_IS_GL()
+	SDL_strlcpy(ro_title, str, sizeof(ro_title));
+	RISCOS_ShowTitle(); return;
+#endif
 	SDL_SetWindowTitle(win_handle, str);
 }
 
@@ -387,9 +414,7 @@ void Window_ProcessEvents(float delta) {
 			break;
 		case SDL_MOUSEMOTION:
 			Pointer_SetPosition(0, e.motion.x, e.motion.y);
-#ifndef CC_BUILD_RISCOS /* RISC OS: read in Window_UpdateRawMouse */
 			if (Input.RawMode) Event_RaiseRawMove(&PointerEvents.RawMoved, e.motion.xrel, e.motion.yrel);
-#endif
 			break;
 		case SDL_TEXTINPUT:
 			OnTextEvent(&e); break;
@@ -526,116 +551,6 @@ void OnscreenKeyboard_Open(struct OpenKeyboardArgs* args) { SDL_StartTextInput()
 void OnscreenKeyboard_SetText(const cc_string* text) { }
 void OnscreenKeyboard_Close(void) { SDL_StopTextInput(); }
 
-#ifdef CC_BUILD_RISCOS
-/* riscos-mesa's SDL driver has no relative mouse mode and can't move the */
-/*  pointer, so mouse look is done here: each frame the mouse's movement */
-/*  is read with OS_Word 21,4 (unbuffered: unlike OS_Mouse it takes nothing */
-/*  from the buffer the driver reads clicks from), then the mouse is put */
-/*  back in the middle of the game's window (or of the screen, full screen) */
-/*  with OS_Word 21,3. Wimp_GetPointerInfo finds the window's handle. */
-#include <kernel.h>
-#define XOS_Word             0x20007
-#define XOS_ReadModeVariable 0x20035
-#define XWimp_GetWindowState 0x600CB
-#define XWimp_GetPointerInfo 0x600CF
-
-static int ro_window = -1; /* the game's Wimp window, once the pointer's been over it */
-static int ro_refX, ro_refY, ro_haveRef, ro_eigX = 1, ro_eigY = 1;
-
-/* The window under the pointer (as at the last Wimp_Poll) */
-static int RISCOS_WindowUnderPointer(void) {
-	_kernel_swi_regs r;
-	int block[5] = { 0, 0, 0, -1, 0 };
-	r.r[1] = (int)block;
-	if (_kernel_swi(XWimp_GetPointerInfo, &r, &r)) return -1;
-	return block[3];
-}
-
-/* The mouse position now, in OS units */
-static void RISCOS_GetMouse(int* x, int* y) {
-	_kernel_swi_regs r;
-	unsigned char block[5] = { 4, 0, 0, 0, 0 }; /* read unbuffered mouse position */
-	r.r[0] = 21; r.r[1] = (int)block;
-	_kernel_swi(XOS_Word, &r, &r);
-	*x = (short)(block[1] | (block[2] << 8));
-	*y = (short)(block[3] | (block[4] << 8));
-}
-
-static void RISCOS_SetPointer(int x, int y) {
-	_kernel_swi_regs r;
-	unsigned char block[5];
-	block[0] = 3; /* set mouse position, in OS units */
-	block[1] = x & 0xFF; block[2] = (x >> 8) & 0xFF;
-	block[3] = y & 0xFF; block[4] = (y >> 8) & 0xFF;
-	r.r[0] = 21; r.r[1] = (int)block;
-	_kernel_swi(XOS_Word, &r, &r);
-}
-
-static int RISCOS_ModeVar(int var, int def) {
-	_kernel_swi_regs r;
-	r.r[0] = -1; r.r[1] = var;
-	if (_kernel_swi(XOS_ReadModeVariable, &r, &r)) return def;
-	return r.r[2];
-}
-
-/* Middle of the game's window on the screen, in OS units */
-static cc_bool RISCOS_WindowCentre(int* x, int* y) {
-	_kernel_swi_regs r;
-	int block[9];
-
-	/* full screen with a mode change: no desktop window, the whole screen */
-	if ((SDL_GetWindowFlags(win_handle) & SDL_WINDOW_FULLSCREEN_DESKTOP) == SDL_WINDOW_FULLSCREEN) {
-		*x = ((RISCOS_ModeVar(11, 639) + 1) << ro_eigX) / 2;
-		*y = ((RISCOS_ModeVar(12, 479) + 1) << ro_eigY) / 2;
-		return true;
-	}
-	if (ro_window < 0) return false;
-
-	block[0] = ro_window;
-	r.r[1]   = (int)block;
-	if (_kernel_swi(XWimp_GetWindowState, &r, &r)) { ro_window = -1; return false; }
-	*x = (block[1] + block[3]) / 2;
-	*y = (block[2] + block[4]) / 2;
-	return true;
-}
-
-void Window_EnableRawMouse(void) {
-	ro_eigX = RISCOS_ModeVar(4, 1);
-	ro_eigY = RISCOS_ModeVar(5, 1);
-	ro_haveRef = false;
-	SDL_ShowCursor(SDL_DISABLE);
-	Input.RawMode = true;
-}
-
-void Window_UpdateRawMouse(void) {
-	int x, y, cx, cy;
-	RISCOS_GetMouse(&x, &y);
-
-	/* SDL knows when the pointer is over the game's window: that window */
-	/*  is then the one under the pointer */
-	if (ro_window < 0 && SDL_GetMouseFocus() == win_handle) ro_window = RISCOS_WindowUnderPointer();
-
-	if (ro_haveRef && (x != ro_refX || y != ro_refY)) {
-		/* OS units to pixels; the screen's y goes up */
-		Event_RaiseRawMove(&PointerEvents.RawMoved,
-			(float)(x - ro_refX) / (1 << ro_eigX), (float)(ro_refY - y) / (1 << ro_eigY));
-	}
-
-	if (RISCOS_WindowCentre(&cx, &cy)) {
-		RISCOS_SetPointer(cx, cy);
-		ro_refX = cx; ro_refY = cy;
-	} else {
-		/* window not known yet: follow the pointer (stops at the screen's edge) */
-		ro_refX = x; ro_refY = y;
-	}
-	ro_haveRef = true;
-}
-
-void Window_DisableRawMouse(void) {
-	SDL_ShowCursor(SDL_ENABLE);
-	Input.RawMode = false;
-}
-#else
 void Window_EnableRawMouse(void) {
 	RegrabMouse();
 	SDL_SetRelativeMouseMode(true);
@@ -648,7 +563,6 @@ void Window_DisableRawMouse(void) {
 	SDL_SetRelativeMouseMode(false);
 	Input.RawMode = false;
 }
-#endif
 
 
 /*########################################################################################################################*
@@ -756,9 +670,44 @@ void* GLContext_GetAddress(const char* function) {
 	return SDL_GL_GetProcAddress(function);
 }
 
+#ifdef CC_BUILD_RISCOS
+/* How EGL is showing the picture, in the title bar (only when it's going */
+/*  through EGL, i.e. with a render size): through the overlay (the display */
+/*  stretches it, free), overlay hidden (something overlaps the window: */
+/*  plotted meanwhile), or plotted (the CPU stretches it). Why there's no */
+/*  overlay: *Show EGL$OverlayStatus */
+#include <EGL/egl.h>
+#include <EGL/eglext_riscos.h>
+
+static void RISCOS_ShowTitle(void) {
+	static const char* const states[] = { " [plotted]", " [overlay]", " [overlay hidden]" };
+	char str[NATIVE_STR_LEN + 20];
+	SDL_strlcpy(str, ro_title, sizeof(str));
+	if (ro_ovlState >= 0 && ro_ovlState <= 2) SDL_strlcat(str, states[ro_ovlState], sizeof(str));
+	SDL_SetWindowTitle(win_handle, str);
+}
+
+static void RISCOS_CheckOverlay(void) {
+	static int swaps;
+	EGLDisplay dpy; EGLSurface surf;
+	EGLint v;
+	if (++swaps % 8) return; /* the overlay starts after a few swaps */
+
+	dpy  = eglGetCurrentDisplay();
+	surf = eglGetCurrentSurface(EGL_DRAW);
+	if (dpy == EGL_NO_DISPLAY || surf == EGL_NO_SURFACE) return;
+	if (!eglQuerySurface(dpy, surf, EGL_OVERLAY_RISCOS, &v)) return;
+	if (v == ro_ovlState) return;
+
+	ro_ovlState = v;
+	RISCOS_ShowTitle();
+}
+#endif
+
 cc_bool GLContext_SwapBuffers(void) {
 	SDL_GL_SwapWindow(win_handle);
 #ifdef CC_BUILD_RISCOS
+	RISCOS_CheckOverlay();
 	/* UnixLib's threads take turns on a timer: give the sound and download */
 	/*  threads their turn every frame (as the VCMI port does) */
 	sched_yield();
