@@ -1457,7 +1457,7 @@ static const char* const keys_text_left[KEYS_ROWS] = {
 	"&fB  &eall blocks    &fG  &edrop",
 };
 static const char* const keys_text_right[KEYS_ROWS] = {
-	"&fEscape  &epause menu",
+	"&fEscape  &epause, frees the mouse",
 	"&fT  &echat     &fTab  &eplayer list",
 	"&fF  &eview distance",
 	"&fF1  &ehide the HUD",
@@ -1468,7 +1468,7 @@ static const char* const keys_text_right[KEYS_ROWS] = {
 	"&fF11  &efull screen",
 	"&fF12  &escreenshot",
 	"&fC &e+ &fwheel  &ezoom",
-	"&ePointer over the game: look",
+	"&fMouse  &elook around",
 };
 
 static struct KeysScreen {

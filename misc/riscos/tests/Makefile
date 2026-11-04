@@ -9,13 +9,13 @@ CFLAGS  := -O1 -g -Wall -mfpu=vfpv3 -mfloat-abi=hard -no-pie \
 OUT     := out
 DEVKIT  ?= $(RISCOS_DEVKIT)
 
-check: $(OUT)/test_acornssl $(OUT)/test_socketpoll $(OUT)/test_cavecull $(OUT)/test_vorbis $(OUT)/test_winsize $(OUT)/test_freemouse
+check: $(OUT)/test_acornssl $(OUT)/test_socketpoll $(OUT)/test_cavecull $(OUT)/test_vorbis $(OUT)/test_winsize $(OUT)/test_mousegrab
 	bash $(RCD_DIR)/qemu/aligntrap.sh $(OUT)/test_acornssl
 	bash $(RCD_DIR)/qemu/aligntrap.sh $(OUT)/test_socketpoll
 	bash $(RCD_DIR)/qemu/aligntrap.sh $(OUT)/test_cavecull
 	bash $(RCD_DIR)/qemu/aligntrap.sh $(OUT)/test_vorbis
 	bash $(RCD_DIR)/qemu/aligntrap.sh $(OUT)/test_winsize
-	bash $(RCD_DIR)/qemu/aligntrap.sh $(OUT)/test_freemouse
+	bash $(RCD_DIR)/qemu/aligntrap.sh $(OUT)/test_mousegrab
 
 $(OUT)/test_acornssl: test_acornssl.c ../../../src/SSL.c $(RCD_DIR)/fake/riscos.c
 	@mkdir -p $(OUT)
@@ -46,7 +46,7 @@ $(OUT)/window_sdl2.o: ../../../src/Window_SDL2.c
 $(OUT)/test_winsize: test_winsize.c $(OUT)/window_sdl2.o $(RCD_DIR)/fake/riscos.c
 	$(CC) $(CFLAGS) -I$(DEVKIT)/include -o $@ $^ -Wl,--unresolved-symbols=ignore-all
 
-$(OUT)/test_freemouse: test_freemouse.c $(OUT)/window_sdl2.o
+$(OUT)/test_mousegrab: test_mousegrab.c $(OUT)/window_sdl2.o
 	$(CC) $(CFLAGS) -I$(DEVKIT)/include -o $@ $^ -Wl,--unresolved-symbols=ignore-all
 
 # Vorbis.c (included by the test) with the RISC OS branch on, so with

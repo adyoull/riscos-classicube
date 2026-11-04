@@ -10,7 +10,7 @@ with crossdev 1.10's UnixLib 5.0.3.6, real `sem_timedwait`), then `elf2aif -e`
 | Part | How |
 |---|---|
 | Platform | `Platform_Posix.c` on UnixLib; single process (launcher and game in one task); URLs through `URI_Dispatch`; static symbol table instead of `dlopen` (OpenAL); data in `ClassiCube$Data` (default `<Choices$Write>.ClassiCube`); updater off |
-| Window, input | `Window_SDL2.c` on riscos-mesa's SDL2 (RISC OS video driver with GL), upstream's SDL code: keyboard focus (pauses when the window loses the caret) and since test10 mouse look **without holding the pointer** (as the other RISC OS ports: the owner wants it to leave the window freely): while playing the view turns by SDL's xrel/yrel while the pointer is over the window, where it's hidden (the crosshair is the aim); turning stops at the window's edges; the first movement after mouse look starts or the pointer comes back in is skipped (no jump). No SDL relative mode or warp (test8-9 used 18a's; test5-7 had an always-focused window, which never let the mouse go, and OS_Word 21 mouse look) |
+| Window, input | `Window_SDL2.c` on riscos-mesa's SDL2 (RISC OS video driver with GL), upstream's SDL code: keyboard focus (pauses when the window loses the caret) and mouse look through SDL's relative mouse mode (riscos-mesa 18a and later: holds the pointer only while the window has the caret), with "- Escape frees the mouse" in the title bar while held. test10 tried not holding the pointer at all; the owner found turning stopped at the window's edges, so test12 holds it again. test5-7 had their own: an always-focused window, which never let the mouse go, and OS_Word 21 mouse look |
 | Graphics | `Graphics_GL1.c`: OpenGL 1.x, riscos-mesa (software, NEON fast paths); `CC_GL_FASTEST_HINTS`: GL_FASTEST perspective and fog hints (its fast route) |
 | Cave culling | `CaveCull.c`, `Builder.c` (links per chunk), `MapRenderer.c` (flood from the camera): `CC_BUILD_CAVECULL` |
 | Render size | `Window_SDL2.c`: `ClassiCube$RenderSize` (default 640x360, `full` = off) and `ClassiCube$Overlay` become `SDL_RISCOS_GL_RENDER_SIZE` / `SDL_RISCOS_GL_OVERLAY` before the game window opens; `sched_yield()` each frame; default view distance 128. Window (`Window_RISCOS_DefaultSize`, when no size is saved): if an overlay is possible (VideoOverlay loaded, `ClassiCube$Overlay` not 0, `EGL$Overlay` not off: RDPServer sets it off), the largest of 3x/2x/1.5x/1x the render size that fits on the desktop less 40x140 (title bar, icon bar), e.g. 1280x720 on 1920x1080, as the display stretches it for nothing; otherwise (the CPU would stretch it, slower for a bigger window) and with `full`, 854x480; `ClassiCube$WindowSize` overrides. The title bar says how EGL shows the picture: [overlay], [overlay hidden] (something overlaps it) or [plotted] (`*Show EGL$OverlayStatus` says why) |
@@ -56,9 +56,10 @@ with crossdev 1.10's UnixLib 5.0.3.6, real `sem_timedwait`), then `elf2aif -e`
     `ClassiCube$WindowSize` and whether an overlay is possible (fake
     OS_Module lookup of VideoOverlay, `ClassiCube$Overlay`, `EGL$Overlay`):
     whole-number and 1.5x scales, exact fits, `full`, bad sizes.
-  - test_freemouse: the mouse look in Window_SDL2.c (RISC OS branch) with
-    SDL events from a queue: no relative mode or warp, pointer hidden and
-    shown, turning by xrel/yrel, no jump on start or on coming back in.
+  - test_mousegrab: the mouse look in Window_SDL2.c (RISC OS branch) with
+    SDL stubbed: relative mode on and off, the title bar hint only while
+    the mouse is held (kept across a new title), turning by xrel/yrel, no
+    pointer moves each frame.
   All catch deliberate mutants. The NEON loads and stores are on float
   and 16-bit arrays without alignment qualifiers (element alignment only),
   which test_vorbis confirms with alignment traps on.

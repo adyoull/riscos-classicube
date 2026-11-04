@@ -57,13 +57,11 @@ Settings > Keys and mouse in the launcher.
 
 Mouse
 -----
-The pointer is never held: while you play, moving it over the game
-window turns the view, and the pointer is hidden there so the cross in
-the middle is your aim. Move it out of the window to use the desktop
-(turning stops at the window's edges; move back in to carry on, and
-move the pointer back towards the middle if you need to turn further).
-Escape opens the pause menu; the game also pauses when another window
-takes the input focus. Click "Back to game" to carry on.
+While you play, the game holds the pointer so the mouse turns the view
+(the cross in the middle is your aim); the title bar says "Escape frees
+the mouse". Press Escape for the pause menu and the pointer, and "Back
+to game" to carry on. The game also lets go (and pauses) when another
+window takes the input focus.
 
 Problems
 --------

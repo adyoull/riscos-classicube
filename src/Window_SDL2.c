@@ -204,6 +204,7 @@ void Window_Destroy(void) {
 #if defined CC_BUILD_RISCOS && CC_GFX_BACKEND_IS_GL()
 static char ro_title[NATIVE_STR_LEN];
 static int  ro_ovlState = -1;
+static cc_bool ro_mouseHeld;
 static void RISCOS_ShowTitle(void);
 #endif
 
@@ -369,23 +370,6 @@ static void OnTextEvent(const SDL_Event* e) {
 	}
 }
 
-#ifdef CC_BUILD_RISCOS
-/* RISC OS: mouse look without holding the pointer, as the other RISC OS */
-/*  ports leave the pointer free. While playing, the view turns with the */
-/*  pointer's movement while it's over the game window, where it's hidden */
-/*  (the crosshair is the aim: riscos-mesa's SDL hides the pointer only */
-/*  over the window); it can leave the window at any time, and turning */
-/*  stops at the window's edges. The first movement after the pointer */
-/*  comes back in (or after mouse look starts) only sets where it is: */
-/*  SDL's xrel/yrel would otherwise be the whole jump from where it left. */
-static cc_bool ro_skipMotion = true;
-
-static void RISCOS_RawMotion(const SDL_Event* e) {
-	if (ro_skipMotion) { ro_skipMotion = false; return; }
-	Event_RaiseRawMove(&PointerEvents.RawMoved, e->motion.xrel, e->motion.yrel);
-}
-#endif
-
 static void OnWindowEvent(const SDL_Event* e) {
 	switch (e->window.event) {
 		case SDL_WINDOWEVENT_EXPOSED:
@@ -411,12 +395,6 @@ static void OnWindowEvent(const SDL_Event* e) {
 		case SDL_WINDOWEVENT_CLOSE:
 			Window_RequestClose();
 			break;
-#ifdef CC_BUILD_RISCOS
-		case SDL_WINDOWEVENT_ENTER:
-		case SDL_WINDOWEVENT_LEAVE:
-			ro_skipMotion = true;
-			break;
-#endif
 		}
 }
 
@@ -437,11 +415,7 @@ void Window_ProcessEvents(float delta) {
 			break;
 		case SDL_MOUSEMOTION:
 			Pointer_SetPosition(0, e.motion.x, e.motion.y);
-#ifdef CC_BUILD_RISCOS
-			if (Input.RawMode) RISCOS_RawMotion(&e);
-#else
 			if (Input.RawMode) Event_RaiseRawMove(&PointerEvents.RawMoved, e.motion.xrel, e.motion.yrel);
-#endif
 			break;
 		case SDL_TEXTINPUT:
 			OnTextEvent(&e); break;
@@ -578,18 +552,27 @@ void OnscreenKeyboard_Open(struct OpenKeyboardArgs* args) { SDL_StartTextInput()
 void OnscreenKeyboard_SetText(const cc_string* text) { }
 void OnscreenKeyboard_Close(void) { SDL_StopTextInput(); }
 
-#ifdef CC_BUILD_RISCOS
-/* (see RISCOS_RawMotion): nothing holds or moves the pointer */
+#if defined CC_BUILD_RISCOS && CC_GFX_BACKEND_IS_GL()
+/* RISC OS: riscos-mesa's SDL (devkit 18a and later) holds the pointer in */
+/*  the middle of the window in relative mode, only while the window has */
+/*  the input focus, so the view can turn without stopping at an edge. The */
+/*  title bar says how to get the pointer back while it's held. */
+
 void Window_EnableRawMouse(void) {
-	ro_skipMotion = true;
-	SDL_ShowCursor(SDL_DISABLE);
+	RegrabMouse();
+	SDL_SetRelativeMouseMode(true);
 	Input.RawMode = true;
+	ro_mouseHeld  = true;
+	RISCOS_ShowTitle();
 }
+/* (the driver puts the pointer back in the middle itself) */
 void Window_UpdateRawMouse(void) { }
 
 void Window_DisableRawMouse(void) {
-	SDL_ShowCursor(SDL_ENABLE);
+	SDL_SetRelativeMouseMode(false);
 	Input.RawMode = false;
+	ro_mouseHeld  = false;
+	RISCOS_ShowTitle();
 }
 #else
 void Window_EnableRawMouse(void) {
@@ -723,9 +706,11 @@ void* GLContext_GetAddress(const char* function) {
 
 static void RISCOS_ShowTitle(void) {
 	static const char* const states[] = { " [plotted]", " [overlay]", " [overlay hidden]" };
-	char str[NATIVE_STR_LEN + 20];
+	char str[NATIVE_STR_LEN + 64];
+	if (!win_handle) return;
 	SDL_strlcpy(str, ro_title, sizeof(str));
 	if (ro_ovlState >= 0 && ro_ovlState <= 2) SDL_strlcat(str, states[ro_ovlState], sizeof(str));
+	if (ro_mouseHeld) SDL_strlcat(str, " - Escape frees the mouse", sizeof(str));
 	SDL_SetWindowTitle(win_handle, str);
 }
 
