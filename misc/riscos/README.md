@@ -1,9 +1,10 @@
 # ClassiCube for RISC OS
 
 RISC OS 5 on ARMv7 (VFPv3): Raspberry Pi 2 and later, and other Cortex-A
-boards. An Absolute (AIF) program: a static ELF built with GCCSDK's GCC 10 (riscos-crossdev toolchain)
+boards. An Absolute (AIF) program: a static ELF built with GCCSDK's GCC 10 (riscos-crossdev toolchain 1.10 or later)
 against the riscos-mesa devkit (20.3.5-18a or later: SDL keyboard focus,
-relative mouse mode, OpenAL NEON mixers), then `elf2aif -e`
+relative mouse mode, OpenAL NEON mixers; test9 on 18e: SDL 2.32.10 built
+with crossdev 1.10's UnixLib 5.0.3.6, real `sem_timedwait`), then `elf2aif -e`
 (WimpSlot 20480K in `!Run`).
 
 | Part | How |
