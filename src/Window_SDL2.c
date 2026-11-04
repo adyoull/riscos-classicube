@@ -369,6 +369,23 @@ static void OnTextEvent(const SDL_Event* e) {
 	}
 }
 
+#ifdef CC_BUILD_RISCOS
+/* RISC OS: mouse look without holding the pointer, as the other RISC OS */
+/*  ports leave the pointer free. While playing, the view turns with the */
+/*  pointer's movement while it's over the game window, where it's hidden */
+/*  (the crosshair is the aim: riscos-mesa's SDL hides the pointer only */
+/*  over the window); it can leave the window at any time, and turning */
+/*  stops at the window's edges. The first movement after the pointer */
+/*  comes back in (or after mouse look starts) only sets where it is: */
+/*  SDL's xrel/yrel would otherwise be the whole jump from where it left. */
+static cc_bool ro_skipMotion = true;
+
+static void RISCOS_RawMotion(const SDL_Event* e) {
+	if (ro_skipMotion) { ro_skipMotion = false; return; }
+	Event_RaiseRawMove(&PointerEvents.RawMoved, e->motion.xrel, e->motion.yrel);
+}
+#endif
+
 static void OnWindowEvent(const SDL_Event* e) {
 	switch (e->window.event) {
 		case SDL_WINDOWEVENT_EXPOSED:
@@ -394,6 +411,12 @@ static void OnWindowEvent(const SDL_Event* e) {
 		case SDL_WINDOWEVENT_CLOSE:
 			Window_RequestClose();
 			break;
+#ifdef CC_BUILD_RISCOS
+		case SDL_WINDOWEVENT_ENTER:
+		case SDL_WINDOWEVENT_LEAVE:
+			ro_skipMotion = true;
+			break;
+#endif
 		}
 }
 
@@ -414,7 +437,11 @@ void Window_ProcessEvents(float delta) {
 			break;
 		case SDL_MOUSEMOTION:
 			Pointer_SetPosition(0, e.motion.x, e.motion.y);
+#ifdef CC_BUILD_RISCOS
+			if (Input.RawMode) RISCOS_RawMotion(&e);
+#else
 			if (Input.RawMode) Event_RaiseRawMove(&PointerEvents.RawMoved, e.motion.xrel, e.motion.yrel);
+#endif
 			break;
 		case SDL_TEXTINPUT:
 			OnTextEvent(&e); break;
@@ -551,6 +578,20 @@ void OnscreenKeyboard_Open(struct OpenKeyboardArgs* args) { SDL_StartTextInput()
 void OnscreenKeyboard_SetText(const cc_string* text) { }
 void OnscreenKeyboard_Close(void) { SDL_StopTextInput(); }
 
+#ifdef CC_BUILD_RISCOS
+/* (see RISCOS_RawMotion): nothing holds or moves the pointer */
+void Window_EnableRawMouse(void) {
+	ro_skipMotion = true;
+	SDL_ShowCursor(SDL_DISABLE);
+	Input.RawMode = true;
+}
+void Window_UpdateRawMouse(void) { }
+
+void Window_DisableRawMouse(void) {
+	SDL_ShowCursor(SDL_ENABLE);
+	Input.RawMode = false;
+}
+#else
 void Window_EnableRawMouse(void) {
 	RegrabMouse();
 	SDL_SetRelativeMouseMode(true);
@@ -563,6 +604,7 @@ void Window_DisableRawMouse(void) {
 	SDL_SetRelativeMouseMode(false);
 	Input.RawMode = false;
 }
+#endif
 
 
 /*########################################################################################################################*
