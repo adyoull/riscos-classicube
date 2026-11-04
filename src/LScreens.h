@@ -52,6 +52,9 @@ void ServersScreen_SetActive(void);
 void SettingsScreen_SetActive(void);
 void ThemesScreen_SetActive(void);
 void UpdatesScreen_SetActive(void);
+#ifdef CC_BUILD_KEYSSCREEN
+void KeysScreen_SetActive(void (*next)(void), cc_bool atStart);
+#endif
 
 CC_END_HEADER
 #endif

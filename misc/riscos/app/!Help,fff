@@ -49,6 +49,12 @@ while RDPServer has a client connected, and in full screen). The
 In the game's options: a shorter view distance (default 128 here) helps
 on big server maps; smooth lighting and fancy effects cost speed.
 
+Keys
+----
+A window with the keys and mouse buttons opens when ClassiCube starts.
+Untick "Show this when ClassiCube starts" to stop it; it's also under
+Settings > Keys and mouse in the launcher.
+
 Mouse
 -----
 The pointer is never held: while you play, moving it over the game

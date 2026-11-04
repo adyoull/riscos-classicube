@@ -1431,6 +1431,110 @@ void ServersScreen_SetActive(void) {
 }
 
 
+#ifdef CC_BUILD_KEYSSCREEN
+/*########################################################################################################################*
+*----------------------------------------------------------KeysScreen-----------------------------------------------------*
+*#########################################################################################################################*/
+/* (RISC OS) The keys and mouse buttons, shown before the first screen until */
+/*  "Show this when ClassiCube starts" is unticked (option riscos-keys-at- */
+/*  start), and from Settings. The default keys: they can be changed in the */
+/*  game (Escape > Options > Controls). */
+#define LOPT_RISCOS_KEYS "riscos-keys-at-start"
+#define KEYS_ROWS 12
+
+static const char* const keys_text_left[KEYS_ROWS] = {
+	"&fW A S D  &ewalk",
+	"&fSpace  &ejump",
+	"&fShift  &erun     &fCtrl  &eslow",
+	"&fZ  &efly     &fQ &e/ &fE  &eup / down",
+	"&fX  &ego through blocks",
+	"&fR  &erespawn",
+	"&fEnter  &eset spawn point",
+	"&fSelect  &ebreak block",
+	"&fAdjust  &eplace block",
+	"&fMenu  &ecopy block looked at",
+	"&f1-9 &eor &fwheel  &echoose block",
+	"&fB  &eall blocks    &fG  &edrop",
+};
+static const char* const keys_text_right[KEYS_ROWS] = {
+	"&fEscape  &epause menu",
+	"&fT  &echat     &fTab  &eplayer list",
+	"&fF  &eview distance",
+	"&fF1  &ehide the HUD",
+	"&fF3  &eFPS and position",
+	"&fF5  &ethird person",
+	"&fF7  &eaxis lines",
+	"&fF8  &esmooth camera",
+	"&fF11  &efull screen",
+	"&fF12  &escreenshot",
+	"&fC &e+ &fwheel  &ezoom",
+	"&ePointer over the game: look",
+};
+
+static struct KeysScreen {
+	LScreen_Layout
+	struct LLabel  lblFoot;
+	struct LLabel  lblLeft[KEYS_ROWS], lblRight[KEYS_ROWS];
+	struct LCheckbox cbStartup;
+	struct LButton btnOK;
+} KeysScreen CC_BIG_VAR;
+
+static struct LWidget* keys_widgets[1 + KEYS_ROWS * 2 + 2];
+static struct LLayout  keys_left[KEYS_ROWS][2], keys_right[KEYS_ROWS][2];
+static void (*keys_next)(void);
+
+LAYOUTS keys_lblFoot[]   = { { ANCHOR_CENTRE,        0 }, { ANCHOR_CENTRE,  117 } };
+LAYOUTS keys_cbStartup[] = { { ANCHOR_CENTRE_MIN, -290 }, { ANCHOR_CENTRE,  163 } };
+LAYOUTS keys_btnOK[]     = { { ANCHOR_CENTRE_MIN,  210 }, { ANCHOR_CENTRE,  163 } };
+
+static void KeysScreen_ShowAtStart(struct LCheckbox* w) {
+	Options_SetBool(LOPT_RISCOS_KEYS, w->value);
+}
+
+static void KeysScreen_OK(void* w) { keys_next(); }
+
+static void KeysScreen_Activated(struct LScreen* s_) {
+	struct KeysScreen* s = (struct KeysScreen*)s_;
+	int i;
+
+	for (i = 0; i < KEYS_ROWS; i++)
+	{
+		keys_left[i][0].type   = ANCHOR_CENTRE_MIN; keys_left[i][0].offset  = -305;
+		keys_right[i][0].type  = ANCHOR_CENTRE_MIN; keys_right[i][0].offset =    5;
+		keys_left[i][1].type   = ANCHOR_CENTRE;     keys_left[i][1].offset  = -122 + i * 19;
+		keys_right[i][1].type  = ANCHOR_CENTRE;     keys_right[i][1].offset = -122 + i * 19;
+
+		s->lblLeft[i].small = true; s->lblRight[i].small = true;
+		LLabel_Add(s, &s->lblLeft[i],  keys_text_left[i],  keys_left[i]);
+		LLabel_Add(s, &s->lblRight[i], keys_text_right[i], keys_right[i]);
+	}
+	s->lblFoot.small = true;
+	LLabel_Add(s, &s->lblFoot, "&7To change keys: Escape > Options > Controls, in the game", keys_lblFoot);
+
+	LCheckbox_Add(s, &s->cbStartup, "Show this when ClassiCube starts",
+				KeysScreen_ShowAtStart, keys_cbStartup);
+	LButton_Add(s,   &s->btnOK, 80, 35, "OK", KeysScreen_OK, keys_btnOK);
+	LCheckbox_Set(&s->cbStartup, Options_GetBool(LOPT_RISCOS_KEYS, true));
+}
+
+/* Shows the keys, then next(); or straight to next() if they're not wanted */
+void KeysScreen_SetActive(void (*next)(void), cc_bool atStart) {
+	struct KeysScreen* s = &KeysScreen;
+	if (atStart && !Options_GetBool(LOPT_RISCOS_KEYS, true)) { next(); return; }
+
+	keys_next = next;
+	LScreen_Reset((struct LScreen*)s);
+	s->widgets    = keys_widgets;
+	s->maxWidgets = Array_Elems(keys_widgets);
+
+	s->Activated      = KeysScreen_Activated;
+	s->title          = "Keys and mouse";
+	s->onEnterWidget  = (struct LWidget*)&s->btnOK;
+	s->onEscapeWidget = (struct LWidget*)&s->btnOK;
+	Launcher_SetScreen((struct LScreen*)s);
+}
+#endif
+
 /*########################################################################################################################*
 *--------------------------------------------------------SettingsScreen---------------------------------------------------*
 *#########################################################################################################################*/
@@ -1440,6 +1544,9 @@ static struct SettingsScreen {
 	struct LLabel  lblMode, lblColours;
 	struct LCheckbox cbExtra, cbEmpty, cbScale;
 	struct LLine sep;
+#ifdef CC_BUILD_KEYSSCREEN
+	struct LButton btnKeys;
+#endif
 } SettingsScreen CC_BIG_VAR;
 
 #define SETTINGS_SCREEN_MAX_WIDGETS 9
@@ -1455,6 +1562,10 @@ LAYOUTS set_cbExtra[] = { { ANCHOR_CENTRE_MIN, -190 }, { ANCHOR_CENTRE,  44 } };
 LAYOUTS set_cbEmpty[] = { { ANCHOR_CENTRE_MIN, -190 }, { ANCHOR_CENTRE,  84 } };
 LAYOUTS set_cbScale[] = { { ANCHOR_CENTRE_MIN, -190 }, { ANCHOR_CENTRE, 124 } };
 LAYOUTS set_btnBack[] = { { ANCHOR_CENTRE,        0 }, { ANCHOR_CENTRE, 170 } };
+#ifdef CC_BUILD_KEYSSCREEN
+LAYOUTS set_btnKeys[] = { { ANCHOR_CENTRE_MIN, -190 }, { ANCHOR_CENTRE, 124 } };
+static void SettingsScreen_Keys(void* w) { KeysScreen_SetActive(SettingsScreen_SetActive, false); }
+#endif
 
 
 #if defined CC_BUILD_MOBILE
@@ -1505,8 +1616,14 @@ static void SettingsScreen_AddWidgets(struct SettingsScreen* s) {
 
 	LCheckbox_Add(s, &s->cbEmpty, "Show empty servers in list", 
 				SettingsScreen_ShowEmpty,  set_cbEmpty);
+#ifdef CC_BUILD_KEYSSCREEN
+	/* (display scaling is only on Windows) */
+	LButton_Add(s,   &s->btnKeys, 160, 35, "Keys and mouse", 
+				SettingsScreen_Keys, set_btnKeys);
+#else
 	LCheckbox_Add(s, &s->cbScale, "Use display scaling", 
 				SettingsScreen_DPIScaling, set_cbScale);
+#endif
 	LButton_Add(s,   &s->btnBack, 80, 35, "Back", 
 				SwitchToMain, set_btnBack);
 }
@@ -1522,7 +1639,9 @@ static void SettingsScreen_Activated(struct LScreen* s_) {
 #endif
 
 	LCheckbox_Set(&s->cbEmpty, Launcher_ShowEmptyServers);
+#ifndef CC_BUILD_KEYSSCREEN
 	LCheckbox_Set(&s->cbScale, DisplayInfo.DPIScaling);
+#endif
 }
 
 void SettingsScreen_SetActive(void) {

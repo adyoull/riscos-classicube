@@ -12,6 +12,7 @@
      CC_FRAMES       frames measured (default 60), then it quits
      CC_PROF=file    PC samples (SIGPROF, 1 ms of CPU) while measuring
      CC_SHOT=file    the last frame as a PPM
+     CC_LAUNCHER_SHOT=file  the launcher (run without --singleplayer) as a PPM
      CC_TURN=deg     camera turn per frame (default 0.5), so frames differ
      CC_SKIP=a,b     render passes left out, to see what each costs (names
                      below: sky clouds sides edges normal translucent
@@ -163,7 +164,21 @@ void Window_AllocFramebuffer(struct Bitmap* bmp, int width, int height) {
 	bmp->scan0 = (BitmapCol*)Mem_Alloc(width * height, BITMAPCOLOR_SIZE, "window pixels");
 	bmp->width = width; bmp->height = height;
 }
-void Window_DrawFramebuffer(Rect2D r, struct Bitmap* bmp) { }
+/* CC_LAUNCHER_SHOT=file: the launcher's picture (the Nth time it's drawn,
+   CC_LAUNCHER_FRAME, default 3) as a PPM, then quit */
+void Window_DrawFramebuffer(Rect2D r, struct Bitmap* bmp) {
+	static int draws;
+	const char* f = getenv("CC_LAUNCHER_SHOT"); const char* n = getenv("CC_LAUNCHER_FRAME");
+	FILE* o; int x, y;
+	if (!f || ++draws < (n ? atoi(n) : 3) || !(o = fopen(f, "wb"))) return;
+	fprintf(o, "P6\n%d %d\n255\n", bmp->width, bmp->height);
+	for (y = 0; y < bmp->height; y++)
+		for (x = 0; x < bmp->width; x++) {
+			BitmapCol c = Bitmap_GetPixel(bmp, x, y);
+			fputc(BitmapCol_R(c), o); fputc(BitmapCol_G(c), o); fputc(BitmapCol_B(c), o);
+		}
+	fclose(o); exit(0);
+}
 void Window_FreeFramebuffer(struct Bitmap* bmp) { Mem_Free(bmp->scan0); }
 void OnscreenKeyboard_Open(struct OpenKeyboardArgs* args) { }
 void OnscreenKeyboard_SetText(const cc_string* text) { }

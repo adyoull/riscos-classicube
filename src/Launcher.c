@@ -271,9 +271,17 @@ void Launcher_Setup(void) {
 	Resources_CheckExistence();
 
 	if (Resources_MissingCount) {
+#ifdef CC_BUILD_KEYSSCREEN
+		KeysScreen_SetActive(CheckResourcesScreen_SetActive, true);
+#else
 		CheckResourcesScreen_SetActive();
+#endif
 	} else {
+#ifdef CC_BUILD_KEYSSCREEN
+		KeysScreen_SetActive(MainScreen_SetActive, true);
+#else
 		MainScreen_SetActive();
+#endif
 	}
 #else
 	MainScreen_SetActive();

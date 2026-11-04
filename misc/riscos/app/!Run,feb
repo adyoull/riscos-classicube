@@ -32,6 +32,11 @@ RMEnsure SharedSoundBuffer 0.07 RMEnsure DigitalRenderer 0.51 IfThere System:Mod
 |   ClassiCube$Overlay     0 to stretch without the overlay
 |   ClassiCube$WindowSize  WxH (default with an overlay: 3x, 2x or 1.5x
 |                          the render size, the biggest that fits; else 854x480)
+| To use one of these, take the | off the front:
+| Set ClassiCube$WindowSize 1280x720
+| Set ClassiCube$RenderSize 480x270
+| Set ClassiCube$Overlay 0
+| (A size saved in the game with /client resolution wins over WindowSize.)
 If "<ClassiCube$RenderSize>" = "" Then Set ClassiCube$RenderSize 640x360
 RMEnsure VideoOverlay 0.00 IfThere System:Modules.VideoOverlay Then RMLoad System:Modules.VideoOverlay
 |

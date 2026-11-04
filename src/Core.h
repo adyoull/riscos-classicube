@@ -285,6 +285,7 @@ typedef cc_uint8  cc_bool;
 	#define CC_GL_FASTEST_HINTS /* riscos-mesa's NEON fast route (Graphics_GL1.c) */
 	#define CC_BUILD_CAVECULL   /* skip chunks the camera can't see into (CaveCull.c) */
 	#define CC_BUILD_NEON       /* NEON music decoding, when the CPU has it (Vorbis.c) */
+	#define CC_BUILD_KEYSSCREEN /* the keys, shown when the launcher starts (LScreens.c) */
 #elif defined PLAT_AMIGA
 	#undef  CC_BUILD_FREETYPE
 	#define CC_BUILD_AMIGA

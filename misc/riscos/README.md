@@ -14,6 +14,7 @@ with crossdev 1.10's UnixLib 5.0.3.6, real `sem_timedwait`), then `elf2aif -e`
 | Graphics | `Graphics_GL1.c`: OpenGL 1.x, riscos-mesa (software, NEON fast paths); `CC_GL_FASTEST_HINTS`: GL_FASTEST perspective and fog hints (its fast route) |
 | Cave culling | `CaveCull.c`, `Builder.c` (links per chunk), `MapRenderer.c` (flood from the camera): `CC_BUILD_CAVECULL` |
 | Render size | `Window_SDL2.c`: `ClassiCube$RenderSize` (default 640x360, `full` = off) and `ClassiCube$Overlay` become `SDL_RISCOS_GL_RENDER_SIZE` / `SDL_RISCOS_GL_OVERLAY` before the game window opens; `sched_yield()` each frame; default view distance 128. Window (`Window_RISCOS_DefaultSize`, when no size is saved): if an overlay is possible (VideoOverlay loaded, `ClassiCube$Overlay` not 0, `EGL$Overlay` not off: RDPServer sets it off), the largest of 3x/2x/1.5x/1x the render size that fits on the desktop less 40x140 (title bar, icon bar), e.g. 1280x720 on 1920x1080, as the display stretches it for nothing; otherwise (the CPU would stretch it, slower for a bigger window) and with `full`, 854x480; `ClassiCube$WindowSize` overrides. The title bar says how EGL shows the picture: [overlay], [overlay hidden] (something overlaps it) or [plotted] (`*Show EGL$OverlayStatus` says why) |
+| Keys screen | `LScreens.c` `CC_BUILD_KEYSSCREEN` (RISC OS): a launcher screen listing the default keys and mouse buttons, shown before the first screen until "Show this when ClassiCube starts" is unticked (option `riscos-keys-at-start`), and from Settings > Keys and mouse (in place of the Windows-only display scaling box) |
 | Sound | `Audio_OpenAL.c`: the devkit's OpenAL Soft, through SDL (SharedSoundBuffer or DigitalRenderer) |
 | Music | `Vorbis.c` `CC_BUILD_NEON`: NEON versions of the decoder's hot loops (inverse coupling, IMDCT steps 1, 3 and 4, overlap and 16-bit output), only those functions compiled for NEON (`#pragma GCC target`), used when `VFPSupport_Features` says the CPU has Advanced SIMD (`ClassiCube$NoNEON` turns them off); plus tables of codebook vectors and residue class digits, made once per stream, for every CPU |
 | TLS | `SSL.c` `CC_SSL_BACKEND_ACORNSSL`: the AcornSSL module (`AcornSSL_CreateSession` on the connected socket, SNI, non-blocking with sleeps) |
@@ -79,6 +80,8 @@ fixed world seed, MESA_STATS. Nothing in it is part of the game.
   between the program's `perf_mark_start`/`perf_mark_stop`, which the
   window calls once the world is loaded and chunk building has stopped;
   the camera turns 0.5° a frame from then.
+- `CC_LAUNCHER_SHOT=file` (run without `--singleplayer`, `CC_W=640 CC_H=400`):
+  the launcher's picture as a PPM, e.g. to check the keys screen's layout.
 - `cmpview.sh` / `views.sh`: two builds from one or several viewpoints
   (`CC_POS=x,y,z,pitch`, or `cave`): instructions per frame and whether
   the frames are identical (texture animation and clouds off, debug text
