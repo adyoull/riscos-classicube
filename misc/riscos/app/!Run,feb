@@ -47,7 +47,7 @@ CDir <ClassiCube$Data>
 | Messages go to a file instead of opening a command window
 Set ALSOFT_LOGFILE <Wimp$ScrapDir>.ClassiCubeAL
 |
-| The program is about 13.6 MB (code and data); UnixLib keeps its heap in
+| The program is about 11 MB (code and data); UnixLib keeps its heap in
 | a dynamic area, so the slot only has to hold the program and some room
 WimpSlot -min 20480K -max 20480K
 Run <ClassiCube$Dir>.!RunImage > <Wimp$ScrapDir>.ClassiCubeLog 2>&1
