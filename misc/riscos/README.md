@@ -112,23 +112,28 @@ Findings (instructions per frame at 640x360, view distance 128):
   the same elsewhere (on this small map almost everything in view really
   is visible). Off when the camera is inside a solid block (noclip).
 
-## Mixed build (riscos-crossdev 1.11, devkit 20.3.5-19 or later)
+## Mixed build (riscos-crossdev 1.12, devkit 20.3.5-20 or later)
 
 `make riscos RELEASE=1 RISCOS_MIXED=1 RISCOS_DEVKIT=...` links the same
-objects as a *mixed* program, `ClassiCube-mixed,e1f` (about 1.5 MB against
-11 MB static): UnixLib, libstdc++ and libgcc linked in, OpenAL, SDL 2, EGL
-and OSMesa loaded from the devkit's !MesaLibs through !SharedLibs'
-`ld-riscos/so/2` (`-rdynamic -Wl,-rpath-link=<mixed-stubs>
--L<devkit>/lib/shared`, `-ldl` for SDL; the devkit's docs/porting/mixed.md).
+objects as a *mixed* program, `ClassiCube-mixed,e1f` (about 1.8 MB against
+11 MB static): UnixLib (all of it, crossdev 1.12), libstdc++ and libgcc
+linked in; OpenAL, SDL 2, EGL, OSMesa and MesaGPU loaded from the devkit's
+!MesaLibs through !SharedLibs' `ld-riscos/so/2` (`-rdynamic
+-Wl,-rpath-link=<mixed-stubs> -L<devkit>/lib/shared`, `-lMesaGPU` after
+`-lOSMesa`, `-ldl` for SDL; the devkit's docs/porting/mixed.md). With
+`-lMesaGPU`, EGL and OSMesa draw through whatever graphics RISC3D finds,
+or in software where it finds none or !RISC3D isn't there: ClassiCube
+names no driver.
 `MIXED=1 misc/riscos/package.sh VERSION` makes
 `ClassiCube-riscos-VERSION-mixed.zip`: the ELF stays an ELF (`ClassiCube`,
-not converted with elf2aif), `!Run` boots !SharedLibs and !MesaLibs,
-checks for `ld-riscos/so/2`, sets `ClassiCube$LD$Env` to
-`LD_LIBRARY_PATH=/MesaLibs:` and `WimpSlot -min 16000K -max 16000K`, and
-the zip carries !MesaLibs for users to put in !Boot.Resources (not a copy
-inside the app: SOManager shares a library only when programs load the
-same file). Checked with crossdev's `check-all.sh` on the unstripped
-program and `check-mixed-package.sh PROGRAM !MesaLibs/lib`.
+not converted with elf2aif), `!Run` boots !SharedLibs, !RISC3D (if it's
+there: `RMEnsure RISC3D 0.04`) and !MesaLibs, checks for `ld-riscos/so/2`,
+sets `ClassiCube$LD$Env` to `LD_LIBRARY_PATH=/MesaLibs:` and
+`WimpSlot -min 16000K -max 16000K`, and the zip carries !MesaLibs for users
+to put in !Boot.Resources (not a copy inside the app: SOManager shares a
+library only when programs load the same file). Checked with crossdev's
+`check-all.sh` on the unstripped program and `check-mixed-package.sh
+PROGRAM !MesaLibs/lib`.
 
 ## Music decoding speed (container)
 
