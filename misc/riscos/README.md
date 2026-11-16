@@ -135,8 +135,10 @@ library only when programs load the same file). Checked with crossdev's
 `check-all.sh` on the unstripped program and `check-mixed-package.sh
 PROGRAM !MesaLibs/lib`.
 `MESALIBS=<dir>` packages a newer !MesaLibs than the devkit's (a
-!MesaLibs with `,xxx` file types; 1.3.9-riscos1 ships riscos-mesa's
-20.3.5-20gpu8, linked against devkit 20.3.5-20gpu4). A version other than
+!MesaLibs with `,xxx` file types). 1.3.9-riscos1 is linked against devkit
+20.3.5-21 and ships its !MesaLibs, which puts the `ld-riscos/so/2` loader
+into !SharedLibs as it boots; `!Run` checks for !MesaLibs first, then the
+loader. A version other than
 `dev` goes into !Help under the title. Release notes are in
 `misc/riscos/CHANGELOG.md`.
 

@@ -11,8 +11,10 @@ and OpenAL come from riscos-mesa's !MesaLibs (in the zip) through
 !SharedLibs. !RISC3D, when it's in !Boot.Resources, decides how the game
 is drawn; without it the game draws in software.
 
-- Built with riscos-crossdev 1.12 and riscos-mesa devkit 20.3.5-20gpu4,
-  linked with `-lMesaGPU`; ships !MesaLibs 20.3.5-20gpu8.
+- Built with riscos-crossdev 1.12 and riscos-mesa devkit 20.3.5-21,
+  linked with `-lMesaGPU`; ships !MesaLibs 20.3.5-21, which gives
+  !SharedLibs the ld-riscos/so/2 loader as it boots.
+- In PackMan as ClassiCube (Apps.Games), which brings MesaLibs with it.
 - Plays single player and connects to servers (HTTPS through AcornSSL).
 - Mouse look holds the pointer while playing; the title bar says
   "Escape frees the mouse". Escape pauses and frees it, "Back to game"
@@ -26,8 +28,8 @@ is drawn; without it the game draws in software.
   2x or 3x the drawing size and the display scales it up.
 - Speed: GL_FASTEST hints, cave culling, a shorter default view distance,
   NEON music decoding (44% fewer instructions than upstream, same sound).
-- Needs: !SharedLibs with ld-riscos/so/2, SharedUnixLibrary 1.16 or later,
-  ARMEABISupport, and !MesaLibs in !Boot.Resources. !RISC3D 0.04 or later
+- Needs: !SharedLibs and !MesaLibs in !Boot.Resources, SharedUnixLibrary
+  1.16 or later and ARMEABISupport. !RISC3D 0.04 or later
   is optional. About 16 MB of memory for the game, plus the libraries.
 
 Known: still a few frames a second in heavy scenes when drawn in

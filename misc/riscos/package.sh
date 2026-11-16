@@ -38,10 +38,11 @@ s = s[:i] + '''| This is the mixed build: the game (about 2 MB) loads OpenGL, EG
 If "<SharedLibs$Dir>" = "" Then IfThere Boot:Resources.!SharedLibs.!Boot Then Run Boot:Resources.!SharedLibs.!Boot
 RMEnsure RISC3D 0.04 IfThere Boot:Resources.!RISC3D.!Boot Then Run Boot:Resources.!RISC3D.!Boot
 If "<MesaLibs$Dir>" = "" Then IfThere Boot:Resources.!MesaLibs.!Boot Then Run Boot:Resources.!MesaLibs.!Boot
+If "<MesaLibs$Dir>" = "" Then Error !ClassiCube needs !MesaLibs in !Boot.Resources (in the release zip, or MesaLibs from PackMan)
+| !MesaLibs 20.3.5-21 and later put the loader in !SharedLibs as they boot
 Unset ClassiCube$SO2
 IfThere SharedLibs:lib.ld-riscos-eabihf/so Then Set ClassiCube$SO2 1
-If "<ClassiCube$SO2>" = "" Then Error !ClassiCube needs a !SharedLibs with ld-riscos/so/2 (GCCSDK 8 or later, as in Iris) in !Boot.Resources
-If "<MesaLibs$Dir>" = "" Then Error !ClassiCube needs !MesaLibs (in this zip) in !Boot.Resources
+If "<ClassiCube$SO2>" = "" Then Error !ClassiCube needs ld-riscos/so/2 in !SharedLibs: put !MesaLibs 20.3.5-21 or later in !Boot.Resources and restart
 Set ClassiCube$LD$Env "LD_LIBRARY_PATH=/MesaLibs:"
 |
 | The heap is in a dynamic area: the slot holds the program
@@ -55,9 +56,10 @@ PY
 Mixed build
 -----------
 This copy loads OpenGL, EGL, SDL and OpenAL from !MesaLibs instead of
-having them built in. Put !MesaLibs (in this zip) in !Boot.Resources, and
-have a !SharedLibs with ld-riscos/so/2 (GCCSDK 8 or later, as in Iris) in
-!Boot.Resources too. With !RISC3D in !Boot.Resources as well, the game
+having them built in. Put !MesaLibs (in the release zip, or MesaLibs
+from PackMan) in !Boot.Resources,
+beside !SharedLibs, and restart: !MesaLibs (20.3.5-21 or later) gives
+!SharedLibs the ld-riscos/so/2 loader the game needs. With !RISC3D in !Boot.Resources as well, the game
 draws with whatever graphics hardware RISC3D finds; without it, in
 software. After replacing !MesaLibs or !RISC3D, restart the machine.
 HLP

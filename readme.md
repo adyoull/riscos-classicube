@@ -29,6 +29,9 @@ ClassiCube aims to replicate the 2009 Minecraft Classic client while offering **
 
 # Installing
 
+**With PackMan:** add the package source `https://adyoull.github.io/riscos-packages/pkg/index`, then install **ClassiCube** (in Games). PackMan brings MesaLibs and the other libraries it needs. Restart once afterwards, then run !ClassiCube from `Apps.Games`.
+
+**From the zip:**
 The release zip holds two applications:
 * **!ClassiCube**, the game;
 * **!MesaLibs**, riscos-mesa's shared OpenGL, EGL, SDL 2 and OpenAL libraries, which the game loads.
@@ -37,7 +40,7 @@ The release zip holds two applications:
 2. Copy **!ClassiCube** anywhere you like and double-click it.
 
 You also need:
-* !SharedLibs with `ld-riscos/so/2` (GCCSDK 8 or later), in `!Boot.Resources`
+* !SharedLibs, in `!Boot.Resources` (!MesaLibs 20.3.5-21 and later give it the `ld-riscos/so/2` loader the game needs)
 * SharedUnixLibrary 1.16 or later
 * ARMEABISupport
 * the AcornSSL module, to sign in and to download from classicube.net
@@ -107,7 +110,7 @@ When an overlay is possible, the window opens at 2x or 3x the drawing size.
 
 ClassiCube for RISC OS is cross-compiled on Linux or macOS with:
 * the [riscos-crossdev](https://github.com/adyoull/riscos-crossdev) toolchain (GCCSDK GCC 10, UnixLib; 1.12 or later);
-* the riscos-mesa devkit (20.3.5-20 or later): OpenGL (OSMesa), EGL, SDL 2 and OpenAL for RISC OS.
+* the riscos-mesa devkit (20.3.5-21 or later): OpenGL (OSMesa), EGL, SDL 2 and OpenAL for RISC OS.
 
 ```
 export PATH=<toolchain>/bin:$PATH
