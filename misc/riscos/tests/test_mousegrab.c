@@ -4,9 +4,13 @@
    input focus. Checks: mouse look turns relative mode on and off; the
    title bar says "Escape frees the mouse" only while the mouse is held,
    alongside the game's own title; the view turns by SDL's xrel/yrel;
-   nothing moves the pointer each frame (the driver re-centres it). */
+   nothing moves the pointer each frame (the driver re-centres it). Also
+   the game window's SDL hints (render size, overlay), with a getenv that
+   frees its last value as UnixLib's does. */
 #include <stdio.h>
 #include <string.h>
+#include <strings.h>
+#include <stdlib.h>
 #include <SDL2/SDL.h>
 #include "Core.h"
 #include "String_.h"
@@ -45,6 +49,27 @@ SDL_Window* SDL_CreateWindow(const char* t, int x, int y, int w, int h, Uint32 f
 void SDL_GetWindowSize(SDL_Window* win, int* w, int* h) { *w = 640; *h = 360; }
 SDL_Surface* SDL_CreateRGBSurfaceFrom(void* p, int w, int h, int d, int pitch, Uint32 r, Uint32 g, Uint32 b, Uint32 a) { return NULL; }
 void SDL_SetWindowIcon(SDL_Window* w, SDL_Surface* s) { }
+int  SDL_GL_SetAttribute(SDL_GLattr a, int v) { return 0; }
+static char hintSize[64], hintOverlay[16];
+SDL_bool SDL_SetHint(const char* name, const char* value) {
+	if (!strcmp(name, "SDL_RISCOS_GL_RENDER_SIZE")) snprintf(hintSize, sizeof(hintSize), "%s", value);
+	if (!strcmp(name, "SDL_RISCOS_GL_OVERLAY"))     snprintf(hintOverlay, sizeof(hintOverlay), "%s", value);
+	return SDL_TRUE;
+}
+int SDL_strcasecmp(const char* a, const char* b) { return strcasecmp(a, b); }
+/* getenv as UnixLib's is for a name with a '$': one buffer, freed (and
+   scribbled on here) at the next call. ClassiCube read the render size,
+   then the overlay setting, then gave SDL the freed size (riscos-mesa,
+   2026-11-13). */
+extern char** environ;
+static char* ul_buf;
+char* getenv(const char* name) {
+	size_t n = strlen(name); char** e;
+	if (ul_buf) { memset(ul_buf, '#', strlen(ul_buf)); free(ul_buf); ul_buf = NULL; }
+	for (e = environ; *e; e++)
+		if (!strncmp(*e, name, n) && (*e)[n] == '=') { ul_buf = strdup(*e + n + 1); return ul_buf; }
+	return NULL;
+}
 
 static void Motion(int xrel, int yrel) {
 	SDL_Event* e = &queue[queued++];
@@ -93,6 +118,17 @@ int main(void) {
 	CHECK(relative == 1 && strstr(title, HINT), "held again: '%s'", title);
 	Window_DisableRawMouse();
 	CHECK(relativeCalls == 4, "relative mode set 4 times (%d)", relativeCalls);
+
+	/* the game window's hints, with both variables set */
+	DisplayInfo.Depth = 32;
+	setenv("ClassiCube$RenderSize", "480x270", 1);
+	setenv("ClassiCube$Overlay", "1", 1);
+	Window_Create3D(1440, 810);
+	CHECK(!strcmp(hintSize, "480x270"), "render size hint '%s'", hintSize);
+	CHECK(!strcmp(hintOverlay, "1"), "overlay hint '%s'", hintOverlay);
+	setenv("ClassiCube$Overlay", "0", 1);
+	Window_Create3D(1440, 810);
+	CHECK(!strcmp(hintSize, "480x270") && !strcmp(hintOverlay, "0"), "with ClassiCube$Overlay 0: '%s' '%s'", hintSize, hintOverlay);
 
 	printf("test_mousegrab: %d checks, %d failed\n", checks, fails);
 	return fails != 0;

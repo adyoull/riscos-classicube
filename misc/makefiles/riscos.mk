@@ -14,16 +14,18 @@ CC		:= arm-riscos-gnueabihf-gcc
 CFLAGS  := -mfpu=vfpv3 -mfloat-abi=hard -fstack-clash-protection \
            -I$(RISCOS_DEVKIT)/include -I$(RISCOS_DEVKIT)/include/SDL2
 ifdef RISCOS_MIXED
-# A mixed program (riscos-crossdev 1.11 or later, devkit 20.3.5-19 or later):
+# A mixed program (riscos-crossdev 1.12 or later, devkit 20.3.5-20 or later):
 # UnixLib, libstdc++ and libgcc linked in, OpenAL, SDL, EGL and OSMesa
 # loaded from !MesaLibs by !SharedLibs (the devkit's docs/porting/mixed.md).
+# -lMesaGPU after -lOSMesa: EGL and OSMesa then draw through whatever
+# graphics RISC3D (from !RISC3D) finds, or in software where it finds none.
 #   make riscos RELEASE=1 RISCOS_MIXED=1 RISCOS_DEVKIT=<devkit dir>
 # The same objects as the static program; the ELF isn't made an AIF.
 TARGET  := ClassiCube-mixed
 RISCOS_MIXED_STUBS := $(shell $(CC) -print-file-name=mixed-stubs)
 LDFLAGS := -rdynamic -Wl,-rpath-link=$(RISCOS_MIXED_STUBS) \
            -L$(RISCOS_DEVKIT)/lib/shared -L$(RISCOS_DEVKIT)/lib
-LIBS    := -lopenal -lSDL2 -lEGL -lOSMesa -ldl -lpthread -lm
+LIBS    := -lopenal -lSDL2 -lEGL -lOSMesa -lMesaGPU -ldl -lpthread -lm
 else
 LDFLAGS := -static -L$(RISCOS_DEVKIT)/lib
 LIBS    := -lopenal -lSDL2 -lEGL -lOSMesa -lstdc++ -lz -lpthread -lm

@@ -111,14 +111,26 @@ void Window_Create2D(int width, int height) { DoCreateWindow(width, height, 0); 
 /*  VideoOverlay module the display does it, for nothing). */
 /*  ClassiCube$RenderSize: WxH (default 640x360), or "full" for the window's */
 /*  own size. ClassiCube$Overlay 0: stretch without the overlay. */
+/* UnixLib's getenv of a name with a '$' frees and remakes one buffer at */
+/*  each call, so a value is copied before the next getenv (riscos-mesa */
+/*  found this: the render size was read after it had been freed) */
+static const char* RISCOS_GetVar(const char* name, char* buf, int len) {
+	const char* v = getenv(name);
+	if (!v) return NULL;
+	SDL_strlcpy(buf, v, len);
+	return buf;
+}
+
 static const char* RISCOS_RenderSize(void) {
-	const char* size = getenv("ClassiCube$RenderSize");
+	static char buf[32];
+	const char* size = RISCOS_GetVar("ClassiCube$RenderSize", buf, sizeof(buf));
 	return size && size[0] ? size : "640x360";
 }
 
 static void RISCOS_SetRenderHints(void) {
 	const char* size = RISCOS_RenderSize();
-	const char* ovl  = getenv("ClassiCube$Overlay");
+	char ovlbuf[8];
+	const char* ovl  = RISCOS_GetVar("ClassiCube$Overlay", ovlbuf, sizeof(ovlbuf));
 
 	if (SDL_strcasecmp(size, "full") == 0) return;
 	SDL_SetHint("SDL_RISCOS_GL_RENDER_SIZE", size);
@@ -134,8 +146,9 @@ static void RISCOS_SetRenderHints(void) {
 /*  turns overlays off (RDPServer does while a client is connected). */
 /*  Otherwise the CPU stretches it, at a cost that grows with the window. */
 static cc_bool RISCOS_OverlayPossible(void) {
-	const char* ovl = getenv("ClassiCube$Overlay");
-	const char* egl = getenv("EGL$Overlay");
+	char ovlbuf[8], eglbuf[8];
+	const char* ovl = RISCOS_GetVar("ClassiCube$Overlay", ovlbuf, sizeof(ovlbuf));
+	const char* egl = RISCOS_GetVar("EGL$Overlay", eglbuf, sizeof(eglbuf));
 	_kernel_swi_regs r;
 
 	if (ovl && ovl[0] == '0') return false;
@@ -171,9 +184,10 @@ static cc_bool RISCOS_ParseSize(const char* str, int* w, int* h) {
 void Window_RISCOS_DefaultSize(int* width, int* height) {
 	static const int scales[] = { 6, 4, 3, 2 }; /* in halves */
 	int rw, rh, i, w, h;
+	char wsbuf[32];
 
 	*width = 854; *height = 480;
-	if (RISCOS_ParseSize(getenv("ClassiCube$WindowSize"), width, height)) return;
+	if (RISCOS_ParseSize(RISCOS_GetVar("ClassiCube$WindowSize", wsbuf, sizeof(wsbuf)), width, height)) return;
 	if (!RISCOS_ParseSize(RISCOS_RenderSize(), &rw, &rh)) return;
 	if (!RISCOS_OverlayPossible()) return;
 

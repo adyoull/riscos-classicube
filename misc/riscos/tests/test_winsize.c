@@ -18,6 +18,20 @@
 /* what Window_SDL2.c reaches that these checks don't use */
 char Input[4096], PointerEvents[4096];
 int SDL_strcasecmp(const char* a, const char* b) { return strcasecmp(a, b); }
+/* getenv as UnixLib's is for a name with a '$': one buffer, freed and
+   remade at each call. The old value is scribbled on first, so code that
+   keeps a value past the next getenv reads rubbish here (riscos-mesa found
+   ClassiCube doing that, 2026-11-13). */
+extern char** environ;
+static char* ul_buf;
+char* getenv(const char* name) {
+	size_t n = strlen(name); char** e;
+	if (ul_buf) { memset(ul_buf, '#', strlen(ul_buf)); free(ul_buf); ul_buf = NULL; }
+	for (e = environ; *e; e++)
+		if (!strncmp(*e, name, n) && (*e)[n] == '=') { ul_buf = strdup(*e + n + 1); return ul_buf; }
+	return NULL;
+}
+size_t SDL_strlcpy(char* d, const char* s, size_t n) { size_t l = strlen(s); if (n) { size_t c = l < n - 1 ? l : n - 1; memcpy(d, s, c); d[c] = 0; } return l; }
 int SDL_strcmp(const char* a, const char* b) { return strcmp(a, b); }
 
 /* fake OS_Module 18 (look up module): VideoOverlay loaded or not */
@@ -78,6 +92,13 @@ int main(void) {
 	Expect(1920, 1080, NULL, "big",      1280, 720);
 	Expect(1920, 1080, NULL, "",         1280, 720);
 	CHECK2(lookups > 0, "VideoOverlay looked up with OS_Module 18");
+
+	/* each variable read on its own, with others set too (UnixLib getenv) */
+	setenv("ClassiCube$Overlay", "1", 1); setenv("EGL$Overlay", "on", 1);
+	Expect(1920, 1080, "480x270", NULL, 1440, 810);
+	setenv("EGL$Overlay", "off", 1);
+	Expect(1920, 1080, "480x270", NULL, 854, 480);
+	unsetenv("ClassiCube$Overlay"); unsetenv("EGL$Overlay");
 
 	/* no overlay possible: the CPU stretches, so upstream's size */
 	haveOverlayModule = 0;

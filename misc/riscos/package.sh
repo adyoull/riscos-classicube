@@ -25,10 +25,13 @@ if [ -n "${MIXED:-}" ]; then
 import sys
 p = sys.argv[1]; s = open(p).read()
 i = s.index('| The program is about')
-s = s[:i] + '''| This is the mixed build: the game (about 1.5 MB) loads OpenGL, EGL, SDL
+s = s[:i] + '''| This is the mixed build: the game (about 2 MB) loads OpenGL, EGL, SDL
 | and OpenAL from !MesaLibs, through !SharedLibs' ELF loader, so programs
-| using the same !MesaLibs share one copy of them. Both go in !Boot.Resources.
+| using the same !MesaLibs share one copy of them. !RISC3D, if it's in
+| !Boot.Resources, works out which graphics hardware to draw with; without
+| it the game draws in software. All three go in !Boot.Resources.
 If "<SharedLibs$Dir>" = "" Then IfThere Boot:Resources.!SharedLibs.!Boot Then Run Boot:Resources.!SharedLibs.!Boot
+RMEnsure RISC3D 0.04 IfThere Boot:Resources.!RISC3D.!Boot Then Run Boot:Resources.!RISC3D.!Boot
 If "<MesaLibs$Dir>" = "" Then IfThere Boot:Resources.!MesaLibs.!Boot Then Run Boot:Resources.!MesaLibs.!Boot
 Unset ClassiCube$SO2
 IfThere SharedLibs:lib.ld-riscos-eabihf/so Then Set ClassiCube$SO2 1
@@ -49,7 +52,9 @@ Mixed build
 This copy loads OpenGL, EGL, SDL and OpenAL from !MesaLibs instead of
 having them built in. Put !MesaLibs (in this zip) in !Boot.Resources, and
 have a !SharedLibs with ld-riscos/so/2 (GCCSDK 8 or later, as in Iris) in
-!Boot.Resources too.
+!Boot.Resources too. With !RISC3D in !Boot.Resources as well, the game
+draws with whatever graphics hardware RISC3D finds; without it, in
+software. After replacing !MesaLibs or !RISC3D, restart the machine.
 HLP
 else
   # An Absolute (AIF) file: runs without the !SharedLibs ELF loader, and
