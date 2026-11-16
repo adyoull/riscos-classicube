@@ -1,5 +1,20 @@
 # ClassiCube for RISC OS: changes
 
+## 1.3.9-riscos2 (2026-11-16)
+
+The same program as 1.3.9-riscos1, with riscos-mesa's released !MesaLibs
+and a PackMan package.
+
+- Ships !MesaLibs 20.3.5-21 (riscos1 had the 20.3.5-20gpu8 test build),
+  and is linked against devkit 20.3.5-21. This !MesaLibs gives
+  !SharedLibs the ld-riscos/so/2 loader as it boots, so a !SharedLibs from
+  PackMan is enough.
+- `!Run` checks for !MesaLibs before the loader, and its messages say
+  where !MesaLibs comes from: the release zip, or PackMan.
+- In PackMan as ClassiCube (Games), which brings MesaLibs with it.
+- The readme is about the RISC OS port only, with screenshots from
+  RISC OS (misc/riscos/images).
+
 ## 1.3.9-riscos1 (2026-11-16)
 
 The first release of the RISC OS port, ClassiCube 1.3.9 (upstream 44ba25a)
@@ -11,10 +26,8 @@ and OpenAL come from riscos-mesa's !MesaLibs (in the zip) through
 !SharedLibs. !RISC3D, when it's in !Boot.Resources, decides how the game
 is drawn; without it the game draws in software.
 
-- Built with riscos-crossdev 1.12 and riscos-mesa devkit 20.3.5-21,
-  linked with `-lMesaGPU`; ships !MesaLibs 20.3.5-21, which gives
-  !SharedLibs the ld-riscos/so/2 loader as it boots.
-- In PackMan as ClassiCube (Apps.Games), which brings MesaLibs with it.
+- Built with riscos-crossdev 1.12 and riscos-mesa devkit 20.3.5-20gpu4,
+  linked with `-lMesaGPU`; ships !MesaLibs 20.3.5-20gpu8.
 - Plays single player and connects to servers (HTTPS through AcornSSL).
 - Mouse look holds the pointer while playing; the title bar says
   "Escape frees the mouse". Escape pauses and frees it, "Back to game"

@@ -23,6 +23,8 @@ ClassiCube aims to replicate the 2009 Minecraft Classic client while offering **
 
 </details>
 
+![ClassiCube on RISC OS](misc/riscos/images/classicube-riscos-game.png)
+
 ![classic](https://github.com/ClassiCube/ClassiCube/assets/6509348/eedee53f-f53e-456f-b51c-92c62079eee0)
 
 ![enhanced](https://github.com/ClassiCube/ClassiCube/assets/6509348/b2fe0e2b-5d76-41ab-909f-048d0ad15f37)
