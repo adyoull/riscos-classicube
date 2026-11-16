@@ -4,7 +4,8 @@
 #   MIXED=1 misc/riscos/package.sh [VERSION]   the mixed program (below)
 # Needs: ClassiCube,e1f (make riscos RELEASE=1 RISCOS_DEVKIT=...; stripped),
 # or for MIXED=1 ClassiCube-mixed,e1f (... RISCOS_MIXED=1) and the devkit's
-# riscos/!MesaLibs,
+# riscos/!MesaLibs (or MESALIBS=<a !MesaLibs with ,xxx file types>, for a
+# newer !MesaLibs than the devkit's),
 # elf2aif (riscos-crossdev toolchain: ELF2AIF, or on the PATH),
 # RISCOS_DEVKIT (for PThreadTicker), RCD_DIR (riscos-crossdev: png2sprite,
 # rozip) and python3 with PIL (to scale the icon).
@@ -16,6 +17,10 @@ VER=${1:-dev}
 APP='dist/!ClassiCube'
 rm -rf "$APP" && mkdir -p "$APP"
 cp misc/riscos/app/* "$APP/"
+if [ "$VER" != dev ]; then
+  # the port's version under !Help's title
+  sed -i "3i\\Version $VER" "$APP/!Help,fff"
+fi
 if [ -n "${MIXED:-}" ]; then
   # A mixed program: an ELF file run by !SharedLibs' loader, loading OpenAL,
   # SDL, EGL and OSMesa from !MesaLibs (the devkit's docs/porting/mixed.md).
@@ -73,7 +78,7 @@ PY
 #  the Filer scales the big icon for small views)
 python3 "$RCD_DIR/package/png2sprite.py" "$APP/!Sprites,ff9" '!classicube=build/icon-big.png'
 if [ -n "${MIXED:-}" ]; then
-  rm -rf 'dist/!MesaLibs' && cp -r "$RISCOS_DEVKIT/riscos/!MesaLibs" dist/
+  rm -rf 'dist/!MesaLibs' && cp -r "${MESALIBS:-$RISCOS_DEVKIT/riscos/!MesaLibs}" dist/
   python3 "$RCD_DIR/package/rozip.py" "dist/ClassiCube-riscos-$VER-mixed.zip" -C dist '!ClassiCube' '!MesaLibs'
   echo "made dist/ClassiCube-riscos-$VER-mixed.zip"
 else

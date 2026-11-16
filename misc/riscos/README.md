@@ -134,6 +134,11 @@ to put in !Boot.Resources (not a copy inside the app: SOManager shares a
 library only when programs load the same file). Checked with crossdev's
 `check-all.sh` on the unstripped program and `check-mixed-package.sh
 PROGRAM !MesaLibs/lib`.
+`MESALIBS=<dir>` packages a newer !MesaLibs than the devkit's (a
+!MesaLibs with `,xxx` file types; 1.3.9-riscos1 ships riscos-mesa's
+20.3.5-20gpu8, linked against devkit 20.3.5-20gpu4). A version other than
+`dev` goes into !Help under the title. Release notes are in
+`misc/riscos/CHANGELOG.md`.
 
 ## Music decoding speed (container)
 
