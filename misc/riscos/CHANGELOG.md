@@ -1,6 +1,6 @@
 # ClassiCube for RISC OS: changes
 
-## 1.3.9-riscos3 (in testing: 1.3.9-riscos3test1, 2026-11-26)
+## 1.3.9-riscos3 (2026-11-26)
 
 The same source as 1.3.9-riscos2, rebuilt with the newest libraries.
 
