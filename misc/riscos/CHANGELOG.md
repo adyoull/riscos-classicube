@@ -1,5 +1,20 @@
 # ClassiCube for RISC OS: changes
 
+## 1.3.9-riscos3 (in testing: 1.3.9-riscos3test1, 2026-11-26)
+
+The same source as 1.3.9-riscos2, rebuilt with the newest libraries.
+
+- Built with riscos-crossdev 1.14 (UnixLib 5.0.3.12, linked in) and
+  riscos-mesa devkit 20.3.5-24; ships !MesaLibs 20.3.5-24.
+- From that !MesaLibs: with !RISC3D drawing on a Pi 4's GPU, the GPU
+  also shows the game's window (no overlay or plot), and scales it when
+  `ClassiCube$RenderSize` is smaller than the window; SDL's mouse look
+  keeps the same speed at any render size and doesn't drift; the
+  launcher is drawn at full width in alpha desktop modes (C16M LABGR);
+  16 bpp desktops draw with the right shape and colours.
+- The 1.3.9-riscos2 program also works with !MesaLibs 20.3.5-24
+  (check-mixed-package).
+
 ## 1.3.9-riscos2 (2026-11-16)
 
 The same program as 1.3.9-riscos1, with riscos-mesa's released !MesaLibs

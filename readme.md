@@ -111,8 +111,8 @@ When an overlay is possible, the window opens at 2x or 3x the drawing size.
 # Compiling
 
 ClassiCube for RISC OS is cross-compiled on Linux or macOS with:
-* the [riscos-crossdev](https://github.com/adyoull/riscos-crossdev) toolchain (GCCSDK GCC 10, UnixLib; 1.12 or later);
-* the riscos-mesa devkit (20.3.5-21 or later): OpenGL (OSMesa), EGL, SDL 2 and OpenAL for RISC OS.
+* the [riscos-crossdev](https://github.com/adyoull/riscos-crossdev) toolchain (GCCSDK GCC 10, UnixLib; 1.14 or later);
+* the riscos-mesa devkit (20.3.5-24 or later): OpenGL (OSMesa), EGL, SDL 2 and OpenAL for RISC OS.
 
 ```
 export PATH=<toolchain>/bin:$PATH

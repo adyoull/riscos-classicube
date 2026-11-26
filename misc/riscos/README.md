@@ -112,7 +112,7 @@ Findings (instructions per frame at 640x360, view distance 128):
   the same elsewhere (on this small map almost everything in view really
   is visible). Off when the camera is inside a solid block (noclip).
 
-## Mixed build (riscos-crossdev 1.12, devkit 20.3.5-20 or later)
+## Mixed build (riscos-crossdev 1.14, devkit 20.3.5-24 or later)
 
 `make riscos RELEASE=1 RISCOS_MIXED=1 RISCOS_DEVKIT=...` links the same
 objects as a *mixed* program, `ClassiCube-mixed,e1f` (about 1.8 MB against
